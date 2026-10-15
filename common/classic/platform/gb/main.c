@@ -63,8 +63,9 @@
 
 /* Keys pressed at power-on, for scripted screenshots: u, d, l, r, s select,
    e the Select button, b back, a the full-screen key, t one move of the
-   running game, and p to start over as after a power cycle (settings are
-   read back). */
+   running game, p to start over as after a power cycle (settings are
+   read back), and f to put the screen up there and then, as between
+   presses in play (interrupts on from then). */
 #ifndef START_KEYS
 #define START_KEYS ""
 #endif
@@ -396,6 +397,18 @@ static void show(void)
     }
     if (native_up && lcd_drawn()) {
         MBC_ROM_BANK = BANK_NATIVE;
+        if (lcd_zoom_w) {
+            /* A game magnified: lcd_fb at 1x is not what goes up, so every
+               cell of the magnified rectangle is made, and the screen comes
+               back once they are. */
+            native_leave_blank();
+            MBC_ROM_BANK = BANK_MENU;
+            memset(lcd_dirty, 1, sizeof lcd_dirty);
+            zoomed = 0;
+            present();
+            BGP = PALETTE;
+            return;
+        }
         native_leave();
         MBC_ROM_BANK = BANK_MENU;
     }
@@ -459,7 +472,13 @@ void main(void)
             menu_init();
         else if (*key == 't')
             menu_game_step();
-        else
+        else if (*key == 'f') {
+            IF = 0;
+            IE = 0x03;
+            __asm__("ei");
+            menu_draw();
+            show();
+        } else
             press(*key == 'u' ? MENU_KEY_UP : *key == 'd' ? MENU_KEY_DOWN : *key == 'l' ? MENU_KEY_LEFT
                   : *key == 'r' ? MENU_KEY_RIGHT : *key == 's' ? MENU_KEY_SELECT
                   : *key == 'a' ? MENU_KEY_START : *key == 'e' ? MENU_KEY_ALT
