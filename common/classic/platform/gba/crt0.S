@@ -6,8 +6,10 @@
 _start:
     b       reset
     .fill   156, 1, 0           @ logo
-    .ascii  "NOKIA3210\0\0\0"   @ title
-    .ascii  "N32E"              @ game code
+title:
+    .ascii  GBA_TITLE           @ title, from the port's Makefile
+    .fill   12 - (. - title), 1, 0
+    .ascii  GBA_CODE            @ game code
     .ascii  "00"                @ maker code
     .byte   0x96                @ fixed value
     .byte   0                   @ main unit code

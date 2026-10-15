@@ -1,6 +1,6 @@
 # Nokia phone games for Game Boy and Game Boy Advance
 
-The built-in games of three Nokia phones, re-implemented in C from a map of
+The built-in games of four Nokia phones, re-implemented in C from a map of
 each phone's firmware and built as Game Boy (`.gb`) and Game Boy Advance
 (`.gba`) ROMs. The games' pictures, fonts, text, levels and sounds are read
 from your own firmware dump at build time; nothing from the firmware is in
@@ -11,6 +11,7 @@ this repository.
 | [Nokia 3210](3210/README.md) | Snake, Memory, Rotation | yes | yes |
 | [Nokia 3310](3310/README.md) | Snake II, Space Impact, Bantumi, Pairs II | yes | yes |
 | [Nokia 3410](3410/README.md) | Snake II, Space Impact, Bantumi | yes | yes |
+| [Nokia 5110](5110/README.md) | Memory, Snake, Logic | yes | yes |
 
 ![The 3210's first screen, list of games, and Rotation, Snake and Memory being played](3210/docs/banner.png)
 

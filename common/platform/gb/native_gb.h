@@ -19,6 +19,10 @@ void native_cursor(uint8_t row, uint8_t on);
 /* Puts lcd_fb on the screen, every cell its own tile again, as the menus'
    framebuffer has it; returns 0 if no made screen was up. */
 uint8_t native_leave(void);
+/* The same with the tiles left as they are and the screen left blank (the
+   palette all light), for a platform that draws them its own way; it puts
+   the palette back. */
+uint8_t native_leave_blank(void);
 
 /* The palette every port shows its tiles with: colours 1 and 3 dark, 0 and
    2 light, so that only the first bit plane decides, which is all

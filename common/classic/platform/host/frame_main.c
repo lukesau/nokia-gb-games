@@ -88,6 +88,8 @@ int main(int argc, char **argv)
                     ;
             else if (*key == 't')
                 menu_game_step();
+            else if (*key == 'f')
+                ; /* the ROM shows the screen here; drawn above already */
             else
                 menu_key(*key == 'u' ? MENU_KEY_UP : *key == 'd' ? MENU_KEY_DOWN : *key == 'l' ? MENU_KEY_LEFT
                          : *key == 'r' ? MENU_KEY_RIGHT : *key == 's' ? MENU_KEY_SELECT

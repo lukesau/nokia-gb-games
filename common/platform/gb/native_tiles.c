@@ -201,29 +201,45 @@ void native_cursor(uint8_t row, uint8_t on)
     }
 }
 
-uint8_t native_leave(void)
+/* Every cell its own tile again in the map, the screen blanked by the
+   palette; with `fb`, the tiles made from lcd_fb as well. */
+static uint8_t leave(const uint8_t *fb)
 {
     uint8_t tx, ty;
-    const uint8_t *fb = lcd_fb;
 
     if (!shown)
         return 0;
     shown = 0;
     native_up = 0;
     cursor_row = NO_ROW;
-    /* The screen blanked at once by the palette, every colour light, while
-       the cells' own tiles are made from lcd_fb and the tile map is put
-       back; then it all comes up together. */
     set_palette(0);
-    for (ty = 0; ty < CELLS_Y; ty++, fb += 8 * LCD_STRIDE) {
+    for (ty = 0; ty < CELLS_Y; ty++) {
         uint8_t first = row_first(ty);
 
-        native_fb_row(row_tiles(ty), fb);
+        if (fb) {
+            native_fb_row(row_tiles(ty), fb);
+            fb += 8 * LCD_STRIDE;
+        }
         for (tx = 0; tx < CELLS_X; tx++)
             native_map_row[tx] = (uint8_t)(first + tx);
         native_put_row(MAP + ty * 32, native_map_row);
     }
+    return 1;
+}
+
+uint8_t native_leave(void)
+{
+    /* The screen blanked at once by the palette, every colour light, while
+       the cells' own tiles are made from lcd_fb and the tile map is put
+       back; then it all comes up together. */
+    if (!leave(lcd_fb))
+        return 0;
     set_palette(NATIVE_PALETTE);
     memset(lcd_dirty, 0, sizeof lcd_dirty);
     return 1;
+}
+
+uint8_t native_leave_blank(void)
+{
+    return leave(0);
 }

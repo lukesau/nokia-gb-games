@@ -7,6 +7,9 @@
 
 #include <stdint.h>
 
+/* The phone's games: GAME_* in its firmware's order, and what it has. */
+#include "phone.h"
+
 enum {
     GAME_EVENT_INIT = 0x49,
     GAME_EVENT_RESUME = 0x53,
@@ -15,17 +18,6 @@ enum {
     /* Key events are the key's ASCII code: '1'..'9', '*', '#'. */
 };
 
-enum {
-    GAME_ROTATION,
-    GAME_SNAKE,
-    GAME_MEMORY,
-    GAME_REACTION,
-    GAME_LOGIC,
-    GAME_COUNT,
-    /* Settings slot of the full-screen Snake, after the phone's five. */
-    GAME_SNAKE_FULL = GAME_COUNT,
-    GAME_SLOTS
-};
 
 typedef void (*game_handler)(int event);
 

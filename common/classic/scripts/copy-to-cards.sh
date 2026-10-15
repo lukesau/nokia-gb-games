@@ -18,7 +18,8 @@
 # or no card was mounted.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Run from the port's directory, as its `make cards` does.
+ROOT="$(pwd)"
 GB_CARDS=(/Volumes/EZGB_FW4 /Volumes/EZGB_FW5)
 GBA_CARDS=(/Volumes/OMEGADE)
 LOGO_SHA1="17daa0fec02fc33c0f6abb549a8b80b6613b48ee"

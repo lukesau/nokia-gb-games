@@ -4,10 +4,15 @@
 #include "game.h"
 #include "game_assets.h"
 #include "lcd.h"
+#if PHONE_LOGIC
+#include "logic.h"
+#endif
 #include "memory.h"
 #include "native_tiles.h"
 #include "rand.h"
+#if PHONE_ROTATION
 #include "rotation.h"
+#endif
 #include "snake.h"
 #include "sound.h"
 #include "version.h"
@@ -23,23 +28,30 @@
 #define THUMB_HEIGHT 7
 #define SOFTKEY_Y 40
 
-#define GAMES_MENU_NUMBER 6 /* Games is entry 6 of the phone's main menu */
-#define GAMES_MENU_THUMB 12 /* where that puts the main menu's scrollbar */
+/* GAMES_MENU_NUMBER, the main menu's Games entry, and GAMES_MENU_THUMB,
+   where that puts its scrollbar, come from phone.h. */
 
-/* The main menu's Games icon is animated: its first picture stays for
-   GAMES_ICON_FIRST phone ticks, then the next twelve pictures follow every
-   GAMES_ICON_STEP, and the first comes back and stays. Measured in MAME,
-   where the first picture stays 1.08 s and the steps come 0.19 s apart.
-   Showing the entry again starts it over. */
+/* The main menu's Games icon. The 3210's is animated: its first picture
+   stays for GAMES_ICON_FIRST phone ticks, then the next twelve pictures
+   follow every GAMES_ICON_STEP, and the first comes back and stays.
+   Measured in MAME, where the first picture stays 1.08 s and the steps
+   come 0.19 s apart. Showing the entry again starts it over. The 5110's
+   is one picture. GAMES_ICON_HEIGHT comes from phone.h. */
 #define GAMES_ICON_X 10
 #define GAMES_ICON_Y 23
 #define GAMES_ICON_WIDTH 64
-#define GAMES_ICON_HEIGHT 16
 #define GAMES_ICON_BYTES 128
+#if PHONE_GAMES_ICON_ANIMATED
 #define GAMES_ICON_PICTURES 13
 #define GAMES_ICON_STEPS 13
 #define GAMES_ICON_FIRST 140
 #define GAMES_ICON_STEP 24
+#else
+#define GAMES_ICON_PICTURES 1
+#define GAMES_ICON_STEPS 0
+#define GAMES_ICON_FIRST 0
+#define GAMES_ICON_STEP 0
+#endif
 
 enum {
     SCREEN_MAIN,
@@ -65,10 +77,11 @@ enum {
 #define FRAME_US (1000000ul / MENU_TICKS_PER_SECOND)
 #define PHONE_TICK_US 7781
 
-/* The Top score and Game over pages close by themselves: after 768 and
-   385 phone ticks, about six and three seconds. In menu_tick calls. */
-#define TOP_SCORE_TICKS ((uint16_t)(768ul * PHONE_TICK_US / FRAME_US))
-#define GAME_OVER_TICKS ((uint16_t)(385ul * PHONE_TICK_US / FRAME_US))
+/* The Top score and Game over pages close by themselves after the phone's
+   PHONE_TOP_SCORE_TICKS and PHONE_GAME_OVER_TICKS (phone.h). In menu_tick
+   calls. */
+#define TOP_SCORE_TICKS ((uint16_t)((uint32_t)PHONE_TOP_SCORE_TICKS * PHONE_TICK_US / FRAME_US))
+#define GAME_OVER_TICKS ((uint16_t)((uint32_t)PHONE_GAME_OVER_TICKS * PHONE_TICK_US / FRAME_US))
 
 /* The Top score page's animation in its top right corner: stars gather
    into a cup, which then flashes. A new picture every 25 phone ticks; the
@@ -78,11 +91,19 @@ enum {
 #define SPARKLE_HEIGHT 24
 #define SPARKLE_FRAME_BYTES 84
 #define SPARKLE_TICKS 25
+#if PHONE_SPARKLE
 static const uint8_t sparkle_frames[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 10, 10, 9, 9, 10, 10, 9, 10 };
+#define SPARKLE_STEPS (sizeof sparkle_frames)
+#endif
 
-/* Memory's cursor changes between plain and inverted this often, in phone
-   ticks. */
+/* Memory's and Logic's cursor changes between plain and inverted this
+   often, in phone ticks. */
 #define BLINK_TICKS 64
+#if PHONE_LOGIC
+#define GAME_BLINKS(g) ((g) == GAME_MEMORY || (g) == GAME_LOGIC)
+#else
+#define GAME_BLINKS(g) ((g) == GAME_MEMORY)
+#endif
 
 /* A game's menu in item-number order. The second entry is there only when
    a game is paused (Continue) or has just ended (Last view). */
@@ -100,8 +121,6 @@ enum {
     RESUME_LAST_VIEW
 };
 
-#define GAME_COUNT 3
-
 static uint8_t screen;
 static uint8_t game;     /* selection in the list of games */
 static uint8_t item;     /* selection in a game's menu, counting visible items */
@@ -109,6 +128,9 @@ static uint8_t item_top; /* first visible row of a game's menu */
 static uint8_t resume;   /* what the menu's second entry is */
 static uint8_t resume_game;    /* the game that entry belongs to */
 static uint8_t new_top_score;  /* the game just ended beat the top score */
+#if PHONE_LOGIC
+static uint8_t won;            /* the game just ended was won (Logic) */
+#endif
 static uint16_t final_score;   /* its score */
 static uint16_t play_ticks;    /* phone ticks until the game's next tick; 0 for none */
 static uint8_t blink, blink_ticks; /* Memory's cursor is inverted; ticks it has been */
@@ -196,7 +218,7 @@ static const char text_hint_ok[] = "B back   A OK";
 static const char text_hint_back[] = "B back";
 /* The full-screen list's extra entry and its page. The port's own words. */
 static const char text_about[] = "About";
-static const char text_about_body[] = "Nokia 3210 games " GAME_VERSION "\ngithub.com/lukesau/\nnokia-gb-games";
+static const char text_about_body[] = PHONE_NAME " games " GAME_VERSION "\ngithub.com/lukesau/\nnokia-gb-games";
 static const char text_hint_more[] = "B back   A more";
 static uint8_t surround_used;  /* something is drawn around the phone's LCD */
 
@@ -233,7 +255,15 @@ static uint8_t settings_slot(void)
 
 static uint8_t level_count(void)
 {
-    return game == GAME_ROTATION ? ROTATION_LEVELS : game == GAME_MEMORY ? MEMORY_LEVELS : MAX_LEVELS;
+#if PHONE_ROTATION
+    if (game == GAME_ROTATION)
+        return ROTATION_LEVELS;
+#endif
+#if PHONE_LOGIC
+    if (game == GAME_LOGIC)
+        return LOGIC_LEVELS;
+#endif
+    return game == GAME_MEMORY ? MEMORY_LEVELS : MAX_LEVELS;
 }
 
 static void settings_load(void)
@@ -245,35 +275,63 @@ static void settings_load(void)
 
 static const char *help_text(void)
 {
-    return game == GAME_ROTATION ? text_help_rotation : game == GAME_MEMORY ? text_help_memory : text_help_snake;
+#if PHONE_ROTATION
+    if (game == GAME_ROTATION)
+        return text_help_rotation;
+#endif
+#if PHONE_LOGIC
+    if (game == GAME_LOGIC)
+        return text_help_logic;
+#endif
+    return game == GAME_MEMORY ? text_help_memory : text_help_snake;
 }
 
+/* The list of games is the firmware's table in its order. */
 static const char *game_name(uint8_t index)
 {
     switch (index) {
-    case 0:
+#if PHONE_ROTATION
+    case GAME_ROTATION:
         return text_rotation;
-    case 1:
+#endif
+#if PHONE_LOGIC
+    case GAME_LOGIC:
+        return text_logic;
+#endif
+    case GAME_SNAKE:
         return text_snake;
     default:
         return text_memory;
     }
 }
 
+/* Whether the game's menu has an item: the second only while a game is
+   paused or has just ended, Top score only for a game that keeps one. */
+static uint8_t item_shown(uint8_t id)
+{
+    if (id == ITEM_RESUME)
+        return resume != RESUME_NONE;
+    if (id == ITEM_TOP_SCORE)
+        return GAME_HAS_TOP_SCORE(game);
+    return 1;
+}
+
 static uint8_t item_count(void)
 {
-    return resume ? 5 : 4;
+    return (uint8_t)(3 + item_shown(ITEM_RESUME) + item_shown(ITEM_TOP_SCORE));
 }
 
 /* The item at visible position `index`. The phone numbers Level first; the
    full-screen menus list the entries in the order they are used. */
 static uint8_t item_id(uint8_t index)
 {
+    static const uint8_t phone_order[] = { ITEM_LEVEL, ITEM_RESUME, ITEM_NEW_GAME, ITEM_TOP_SCORE, ITEM_INSTRUCTIONS };
     static const uint8_t native_order[] = { ITEM_RESUME, ITEM_NEW_GAME, ITEM_LEVEL, ITEM_TOP_SCORE, ITEM_INSTRUCTIONS };
+    const uint8_t *order = full_screen ? native_order : phone_order;
 
-    if (full_screen)
-        return native_order[resume ? index : index + 1];
-    return (uint8_t)(resume || index == 0 ? index : index + 1);
+    for (;; order++)
+        if (item_shown(*order) && !index--)
+            return *order;
 }
 
 static const char *item_name(uint8_t id)
@@ -565,6 +623,16 @@ static void draw_level(void)
 
     font_draw(&font_small_bold, 5, 0, text_level_title, 1);
     for (i = 0; i < level_count(); i++) {
+#if PHONE_LEVEL_STRIPES
+        /* A left edge and a top; striped every other row up to the chosen
+           level. */
+        uint8_t x = (uint8_t)(5 + i * 7);
+        uint8_t top = (uint8_t)(LEVEL_BASE_Y - 8 - i * 2), y;
+
+        lcd_fill_rect(x, top, 1, LEVEL_BASE_Y + 1 - top, 1);
+        for (y = top; y <= (i <= level_choice ? LEVEL_BASE_Y : top); y += 2)
+            lcd_fill_rect(x, y, 5, 1, 1);
+#else
         uint8_t x = (uint8_t)(5 + i * 8);
         uint8_t height = (uint8_t)(6 + i * 2);
 
@@ -572,14 +640,17 @@ static void draw_level(void)
         lcd_fill_rect(x + 1, LEVEL_BASE_Y, 5, 1, 1);
         if (i <= level_choice)
             lcd_fill_rect(x, LEVEL_BASE_Y - height - 1, 4, height, 1);
+#endif
     }
     draw_softkey(text_ok);
 }
 
 static void draw_sparkle(void)
 {
+#if PHONE_SPARKLE
     lcd_blit_strips(SPARKLE_X, 0, SPARKLE_WIDTH, SPARKLE_HEIGHT,
                     top_score_sparkle + sparkle_frames[sparkle_step] * SPARKLE_FRAME_BYTES);
+#endif
 }
 
 static void draw_number(const struct font *font, int x, int y, uint16_t value)
@@ -620,12 +691,22 @@ static void draw_play(void)
     if (!board_drawn)
         lcd_clear();
     switch (game) {
+#if PHONE_ROTATION
     case GAME_ROTATION:
         if (board_drawn)
             rotation_draw_changes();
         else
             rotation_draw();
         break;
+#endif
+#if PHONE_LOGIC
+    case GAME_LOGIC:
+        /* The firmware clears the LCD before every draw of this game. */
+        if (board_drawn)
+            lcd_clear();
+        logic_draw(blink);
+        break;
+#endif
     case GAME_MEMORY:
         if (board_drawn)
             memory_draw_changes(blink);
@@ -645,9 +726,16 @@ static void draw_play(void)
 static void draw_last_view(void)
 {
     switch (game) {
+#if PHONE_ROTATION
     case GAME_ROTATION:
         rotation_draw();
         break;
+#endif
+#if PHONE_LOGIC
+    case GAME_LOGIC:
+        logic_draw(0);
+        break;
+#endif
     case GAME_MEMORY:
         memory_draw(0);
         break;
@@ -864,7 +952,10 @@ void menu_init(void)
 static void game_menu_open(void)
 {
     screen = SCREEN_GAME;
-    item = item_top = full_screen ? 0 : 1;
+    item = full_screen ? 0 : 1;
+    /* The selection on the top row with Level scrolled out above, unless
+       every entry fits (5110 Logic). */
+    item_top = item_count() > VISIBLE_ROWS ? item : 0;
 }
 
 /* Back to the game's menu from the game. The phone keeps the selection's
@@ -890,8 +981,10 @@ static void play_resume(void)
     play_us = 0;
     if (game == GAME_SNAKE)
         play_schedule(snake_move_ticks());
+#if PHONE_ROTATION
     else if (game == GAME_ROTATION)
         play_schedule(rotation_resume());
+#endif
     else
         play_schedule(0);
 }
@@ -900,9 +993,17 @@ static void play_start(void)
 {
     if (!seed_fixed)
         game_srand(uptime);
+#if PHONE_ROTATION
     if (game == GAME_ROTATION)
         rotation_init(settings.level);
-    else if (game == GAME_MEMORY)
+    else
+#endif
+#if PHONE_LOGIC
+    if (game == GAME_LOGIC)
+        logic_init(settings.level);
+    else
+#endif
+    if (game == GAME_MEMORY)
         memory_init(settings.level);
     else if (full_screen)
         snake_init(settings.level, full_screen_speed[settings.level], SNAKE_FULL_COLS, SNAKE_FULL_ROWS);
@@ -914,6 +1015,9 @@ static void play_start(void)
 static void play_over(uint16_t score)
 {
     final_score = score;
+#if PHONE_LOGIC
+    won = 0;
+#endif
     new_top_score = score > settings.top_score;
     sound_play(new_top_score ? SOUND_TOP_SCORE : SOUND_GAME_OVER);
     if (new_top_score) {
@@ -924,6 +1028,32 @@ static void play_over(uint16_t score)
     resume_game = game;
     screen = SCREEN_GAME_OVER;
     page_ticks = GAME_OVER_TICKS;
+}
+
+#if PHONE_LOGIC
+/* Logic keeps no score: a right guess ends the game, and with a score of
+   0 the phone's game-over note is plain "Game over!" (5110 v5.28,
+   0x2791c8; the fork's docs/games_menus_5110.md). */
+static void play_won(void)
+{
+    won = 1;
+    new_top_score = 0;
+    sound_play(SOUND_GAME_OVER);
+    resume = RESUME_LAST_VIEW;
+    resume_game = game;
+    screen = SCREEN_GAME_OVER;
+    page_ticks = GAME_OVER_TICKS;
+}
+#endif
+
+/* The Game over page's text. */
+static const char *game_over_text(void)
+{
+#if PHONE_LOGIC
+    if (won)
+        return text_game_over;
+#endif
+    return new_top_score ? text_game_over_top_score : text_game_over_score;
 }
 
 void menu_game_step(void)
@@ -938,13 +1068,16 @@ void menu_game_step(void)
             play_schedule(delay);
         else
             play_over(snake.score);
-    } else if (game == GAME_ROTATION) {
+    }
+#if PHONE_ROTATION
+    else if (game == GAME_ROTATION) {
         delay = rotation_tick();
         if (rotation.over)
             play_over(rotation.score);
         else
             play_schedule(delay);
     }
+#endif
 }
 
 /* The phone key a button stands for in the running game, or 0: `key` with
@@ -952,7 +1085,9 @@ void menu_game_step(void)
    was pressed. The direction buttons are 2, 4, 6 and 8 in every game.
    Memory turns a card with the Navi button and jumps to the next one face
    down with Start, to the previous one with Select; Rotation turns with
-   the clock on the Navi button and against it on Start. */
+   the clock on the Navi button and against it on Start. Logic changes the
+   figure with the Navi button, copies from earlier tries with left, and
+   checks the try with Start or Select. */
 static char play_phone_key(uint8_t key, uint8_t button)
 {
     switch (key) {
@@ -967,8 +1102,14 @@ static char play_phone_key(uint8_t key, uint8_t button)
     case MENU_KEY_SELECT:
         if (game == GAME_MEMORY)
             return button == MENU_KEY_START ? '#' : button == MENU_KEY_ALT ? '*' : '5';
+#if PHONE_ROTATION
         if (game == GAME_ROTATION)
             return button == MENU_KEY_START ? '1' : '3';
+#endif
+#if PHONE_LOGIC
+        if (game == GAME_LOGIC)
+            return button == MENU_KEY_SELECT ? '5' : '*';
+#endif
         return 0;
     default:
         return 0;
@@ -978,7 +1119,9 @@ static char play_phone_key(uint8_t key, uint8_t button)
 static void play_key(uint8_t key, uint8_t button)
 {
     char phone_key = play_phone_key(key, button);
+#if PHONE_ROTATION
     uint16_t delay;
+#endif
 
     if (key == MENU_KEY_BACK) {
         /* The C key pauses into the game's menu. */
@@ -993,12 +1136,22 @@ static void play_key(uint8_t key, uint8_t button)
         play_changed = 1;
         if (memory_key(phone_key))
             play_over(memory.score);
-    } else {
+    }
+#if PHONE_LOGIC
+    else if (game == GAME_LOGIC) {
+        play_changed = 1;
+        if (logic_key(phone_key))
+            play_won();
+    }
+#endif
+#if PHONE_ROTATION
+    else {
         play_changed = 1;
         delay = rotation_key(phone_key);
         if (delay)
             play_schedule(delay);
     }
+#endif
 }
 
 static void game_menu_select(void)
@@ -1187,18 +1340,20 @@ uint8_t menu_tick(void)
             screen = SCREEN_GAME;
             return 1;
         }
+#if PHONE_SPARKLE
         play_us += FRAME_US;
         while (play_us >= PHONE_TICK_US) {
             play_us -= PHONE_TICK_US;
             if (++sparkle_ticks == SPARKLE_TICKS) {
                 sparkle_ticks = 0;
-                if (!full_screen && sparkle_step < sizeof sparkle_frames - 1) {
+                if (!full_screen && sparkle_step < SPARKLE_STEPS - 1) {
                     sparkle_step++;
                     sparkle_only = 1;
                     changed = 1;
                 }
             }
         }
+#endif
         break;
     case SCREEN_GAME_OVER:
         if (--page_ticks == 0) {
@@ -1210,7 +1365,7 @@ uint8_t menu_tick(void)
         play_us += FRAME_US;
         while (play_us >= PHONE_TICK_US) {
             play_us -= PHONE_TICK_US;
-            if (game == GAME_MEMORY && ++blink_ticks == BLINK_TICKS) {
+            if (GAME_BLINKS(game) && ++blink_ticks == BLINK_TICKS) {
                 blink_ticks = 0;
                 blink ^= 1;
                 changed = 1;
@@ -1365,9 +1520,9 @@ void menu_draw(void)
         break;
     case SCREEN_GAME_OVER:
         if (full_screen)
-            native_note(0, new_top_score ? text_game_over_top_score : text_game_over_score, final_score);
+            native_note(0, game_over_text(), final_score);
         else
-            draw_note(new_top_score ? text_game_over_top_score : text_game_over_score, final_score);
+            draw_note(game_over_text(), final_score);
         break;
     case SCREEN_PLAY:
         draw_play();
