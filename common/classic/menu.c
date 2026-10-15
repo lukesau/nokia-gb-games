@@ -1298,6 +1298,27 @@ uint8_t menu_key(uint8_t key)
            || level_choice != was_level || resume != was_resume || help_page != was_page;
 }
 
+void menu_script(const char *keys)
+{
+    for (; *keys; keys++) {
+        if (*keys == 'p')
+            menu_init();
+        else if (*keys == 't')
+            menu_game_step();
+        else if (*keys != 'f')
+            menu_key(*keys == 'u' ? MENU_KEY_UP : *keys == 'd' ? MENU_KEY_DOWN : *keys == 'l' ? MENU_KEY_LEFT
+                     : *keys == 'r' ? MENU_KEY_RIGHT : *keys == 's' ? MENU_KEY_SELECT
+                     : *keys == 'a' ? MENU_KEY_START : *keys == 'e' ? MENU_KEY_ALT
+                     : MENU_KEY_BACK);
+    }
+}
+
+uint8_t menu_held(uint8_t keys)
+{
+    (void)keys;
+    return 0;
+}
+
 void menu_seed(uint32_t seed)
 {
     game_srand(seed);

@@ -24,7 +24,8 @@ typedef void (*game_handler)(int event);
 /* Per-game settings, kept in save storage by the platform. */
 struct game_settings {
     uint16_t top_score;
-    uint8_t level; /* index 0..8 */
+    uint8_t level;  /* index 0..8 */
+    uint8_t option; /* the other ports' second setting; 0 here */
 };
 
 /* One scheduler tick is 7.78125 ms (249/32 ms). */
@@ -32,8 +33,8 @@ struct game_settings {
 
 /* Services a platform layer provides. */
 void platform_request_tick(unsigned ticks); /* deliver GAME_EVENT_TICK after this many ticks */
-/* Load gives zeros when nothing has been saved. */
-void platform_settings_load(uint8_t game, struct game_settings *out);
+/* Load gives zeros, and returns 0, when nothing has been saved. */
+uint8_t platform_settings_load(uint8_t game, struct game_settings *out);
 void platform_settings_save(uint8_t game, const struct game_settings *in);
 
 #endif

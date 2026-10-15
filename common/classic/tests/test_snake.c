@@ -9,9 +9,9 @@
 #include "snake.h"
 #include "sound.h"
 
-void platform_tone(uint16_t hz)
+void platform_tone(uint8_t note)
 {
-    (void)hz;
+    (void)note;
 }
 
 static int play(uint8_t cols, uint8_t rows)

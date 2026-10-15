@@ -99,39 +99,47 @@ void flush_tiles(void);
 /* Called once a frame by the vertical-blank handler in crt0.s. */
 void sound_frame(void)
 {
-    sound_tick(16743); /* a frame is 1/59.73 s */
+    sound_advance(16743); /* a frame is 1/59.73 s */
 }
 
-/* The buzzer is pulse channel 2: a 50% square wave at full volume. Its
-   frequency register is 2048 - 131072 / hz. */
-void platform_tone(uint16_t hz)
+/* The buzzer is pulse channel 2: a 50% square wave at full volume, of
+   131072 / (2048 - its frequency register) hertz. These are eight times
+   131072 over the hertz of the twelve semitones from 440 Hz up; an octave
+   higher is half. */
+static const uint16_t tone_divider[12] = { 2383, 2249, 2123, 2004, 1891, 1785, 1685, 1591, 1501, 1417, 1337, 1262 };
+
+void platform_tone(uint8_t note)
 {
     uint16_t period;
 
-    if (!hz) {
+    if (note == SOUND_SILENCE) {
         NR22 = 0x00; /* volume 0 switches the channel off */
         NR24 = 0x80;
         return;
     }
-    period = (uint16_t)(2048 - 131072ul / hz);
+    period = (uint16_t)(2048 - (((tone_divider[note % 12] >> note / 12) + 4) >> 3));
     NR21 = 0x80;
     NR22 = 0xf0;
     NR23 = (uint8_t)period;
     NR24 = (uint8_t)(0x80 | (period >> 8));
 }
 
-void platform_settings_load(uint8_t game, struct game_settings *out)
+uint8_t platform_settings_load(uint8_t game, struct game_settings *out)
 {
     const uint8_t *record = SAVE + 2 + game * 4;
+    uint8_t found = 0;
 
     out->top_score = 0;
     out->level = 0;
+    out->option = 0;
     MBC_RAM_ENABLE = 0x0a;
     if (SAVE[0] == SAVE_SIGNATURE_0 && SAVE[1] == SAVE_SIGNATURE_1 && record[3] == SAVE_CHECK(record)) {
         out->top_score = (uint16_t)(record[0] << 8 | record[1]);
         out->level = record[2];
+        found = 1;
     }
     MBC_RAM_ENABLE = 0x00;
+    return found;
 }
 
 void platform_settings_save(uint8_t game, const struct game_settings *in)

@@ -10,9 +10,9 @@
 #include "rotation.h"
 #include "sound.h"
 
-void platform_tone(uint16_t hz)
+void platform_tone(uint8_t note)
 {
-    (void)hz;
+    (void)note;
 }
 
 static uint8_t stepped[sizeof lcd_fb];

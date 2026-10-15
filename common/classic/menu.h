@@ -44,4 +44,16 @@ void menu_blink(void);
    out; menu_tick normally does this. For scripted frames. */
 void menu_game_step(void);
 
+/* Presses the keys of a script at power-on, for scripted screenshots: u,
+   d, l, r, s select, e the Select button, b back, a the full-screen key,
+   t one move of the running game, p to start over as after a power cycle
+   (settings are read back); f, which the Game Boy's layer takes to put
+   the screen up, does nothing here. */
+void menu_script(const char *keys);
+
+/* The buttons held down, for the other ports' games that act while one
+   is; these games act on presses only. Returns nonzero when the screen
+   changed. */
+uint8_t menu_held(uint8_t keys);
+
 #endif
