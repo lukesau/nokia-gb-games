@@ -98,6 +98,7 @@ int main(int argc, char **argv)
         audio = fopen(audio_path, "wb");
         core->setAudioBufferSize(core, AUDIO_SAMPLES);
         blip_set_rates(core->getAudioChannel(core, 0), core->frequency(core), 32768);
+        blip_set_rates(core->getAudioChannel(core, 1), core->frequency(core), 32768);
     }
     for (frame = 0; frame < frames; frame++) {
         frame_now = frame;
@@ -108,6 +109,9 @@ int main(int argc, char **argv)
             int n = blip_read_samples(core->getAudioChannel(core, 0), samples, AUDIO_SAMPLES, 0);
 
             fwrite(samples, sizeof samples[0], (size_t)n, audio);
+            /* The right channel's is read too, only so that it does not
+               overflow on a long run. */
+            blip_read_samples(core->getAudioChannel(core, 1), samples, AUDIO_SAMPLES, 0);
         }
     }
     if (audio)
