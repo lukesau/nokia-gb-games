@@ -14,8 +14,7 @@ menu, and so it is here.
 Not yet: the 5110's own menus where they differ from the 3210's. MAME does
 not reach them on v5.28, so they are being mapped from the firmware; until
 then the main menu and the Top score page are the 3210's without its
-animations. A won Logic game shows the phone's "YOU WON!" text, which is
-a guess at what the phone's games framework does with it.
+animations.
 
 ## Checked against the phone
 

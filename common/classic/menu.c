@@ -1008,8 +1008,9 @@ static void play_over(uint16_t score)
 }
 
 #if PHONE_LOGIC
-/* Logic keeps no score: a right guess ends the game with the phone's
-   "YOU WON!" page. */
+/* Logic keeps no score: a right guess ends the game, and with a score of
+   0 the phone's game-over note is plain "Game over!" (5110 v5.28,
+   0x2791c8; the fork's docs/games_menus_5110.md). */
 static void play_won(void)
 {
     won = 1;
@@ -1027,7 +1028,7 @@ static const char *game_over_text(void)
 {
 #if PHONE_LOGIC
     if (won)
-        return text_game_over_won;
+        return text_game_over;
 #endif
     return new_top_score ? text_game_over_top_score : text_game_over_score;
 }
