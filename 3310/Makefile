@@ -35,7 +35,7 @@ SDCC ?= sdcc
 MAKEBIN ?= makebin
 SDAS ?= sdasgb
 GB_FB := -DLCD_FB_WIDTH=160 -DLCD_FB_HEIGHT=144 -DLCD_GAME_ZOOM=2
-GB_CFLAGS = -msm83 --opt-code-speed $(GB_FB) -DSI_DATA_AT=0xa100 '-DPAIRS2_STATE_AT=(SI_DATA_AT + SI_DATA_SIZE)' -DPAIRS2_STATE_END=0xc000 '-DBANTUMI_STATE_AT=(SI_DATA_AT + SI_DATA_SIZE)' -DBANTUMI_STATE_END=0xc000 -DBANTUMI_PLATFORM_SEARCH -DSNAKE2_STATE_AT=SI_DATA_AT '-DSNAKE2_STATE_END=(SI_DATA_AT + SI_DATA_SIZE)' -DLCD_PLATFORM_COLUMNS -DSPRITE_PLATFORM_BAND -DSPRITE_PLATFORM_BITMAP -DSPRITE_PLATFORM_PRESENT -DSI_PLATFORM_FIND_HIT -DSI_SETUP_FAR -DNATIVE_PLATFORM_TILES -DNATIVE_PLATFORM_PALETTE -Icore -I$(COMMON)/core -Iplatform/gb -I$(COMMON)/platform/gb -I$(ASSETS)
+GB_CFLAGS = -msm83 --opt-code-speed $(GB_FB) -DSI_DATA_AT=0xa100 '-DPAIRS2_STATE_AT=(SI_DATA_AT + SI_DATA_SIZE)' -DPAIRS2_STATE_END=0xc000 '-DBANTUMI_STATE_AT=(SI_DATA_AT + SI_DATA_SIZE)' -DBANTUMI_STATE_END=0xc000 -DBANTUMI_PLATFORM_SEARCH -DSNAKE2_STATE_AT=SI_DATA_AT '-DSNAKE2_STATE_END=(SI_DATA_AT + SI_DATA_SIZE)' -DLCD_PLATFORM_COLUMNS -DSPRITE_PLATFORM_BAND -DSPRITE_PLATFORM_BITMAP -DSPRITE_PLATFORM_PRESENT -DSI_PLATFORM_FIND_HIT -DSI_SETUP_FAR -DNATIVE_PLATFORM_TILES -DNATIVE_PLATFORM_PALETTE -Icore -I$(COMMON)/core -I$(COMMON)/bantumi -Iplatform/gb -I$(COMMON)/platform/gb -I$(ASSETS)
 # The SameBoy clone scripts/setup-sameboy.sh makes: its boot ROM, and its
 # core as a library (`make -C $(SAMEBOY) lib`) for tools/gb_run.
 SAMEBOY ?= ../tools/SameBoy
@@ -62,9 +62,9 @@ BUILD := build
 COMMON := ../common
 ASSETS := $(BUILD)/assets
 ASSET_SRC := $(ASSETS)/game_assets.c $(ASSETS)/si_data.c $(ASSETS)/si_tables.c $(ASSETS)/snake2_data.c $(ASSETS)/title_data.c $(ASSETS)/pairs2_data.c $(ASSETS)/bantumi_data.c
-CORE_SRC := $(wildcard core/*.c) $(wildcard $(COMMON)/core/*.c)
-CORE_HDR := $(wildcard core/*.h) $(wildcard $(COMMON)/core/*.h)
-INCLUDES := -Icore -I$(COMMON)/core -Iplatform/host -I$(COMMON)/platform/host -I$(ASSETS)
+CORE_SRC := $(wildcard core/*.c) $(wildcard $(COMMON)/core/*.c) $(COMMON)/bantumi/bantumi.c
+CORE_HDR := $(wildcard core/*.h) $(wildcard $(COMMON)/core/*.h) $(wildcard $(COMMON)/bantumi/*.h)
+INCLUDES := -Icore -I$(COMMON)/core -I$(COMMON)/bantumi -Iplatform/host -I$(COMMON)/platform/host -I$(ASSETS)
 
 GB_ROM := $(BUILD)/nokia3310.gb
 GB_TEST_ROM := $(BUILD)/nokia3310-keys.gb
@@ -75,7 +75,7 @@ GB_BANK2 := core/si.c
 GB_BANK3 := core/si_setup.c $(ASSETS)/si_data.c core/title.c $(ASSETS)/title_data.c
 GB_BANK4 := core/snake2.c $(ASSETS)/snake2_data.c platform/gb/strip.c
 GB_BANK5 := core/pairs2.c $(ASSETS)/pairs2_data.c
-GB_BANK6 := core/bantumi.c core/fireworks.c $(ASSETS)/bantumi_data.c
+GB_BANK6 := $(COMMON)/bantumi/bantumi.c core/fireworks.c $(ASSETS)/bantumi_data.c
 GB_BANK7 := $(COMMON)/platform/gb/native_tiles.c $(ASSETS)/native_data.c
 GB_BANK8 := $(ASSETS)/native_data.c
 gb_rels = $(patsubst %.c,$(BUILD)/gb/$(1)/%.rel,$(notdir $(2)))
@@ -322,7 +322,7 @@ FORCE:
 
 # Game Boy
 
-vpath %.c core $(COMMON)/core platform/gb $(COMMON)/platform/gb $(ASSETS)
+vpath %.c core $(COMMON)/core $(COMMON)/bantumi platform/gb $(COMMON)/platform/gb $(ASSETS)
 
 # main.c reaches the game at 2x in bank 4 through far.c.
 GB_MAIN_FAR := -Dstrip_present=far_strip_present -Dzoom_present=far_zoom_present -Dstrip_leave=far_strip_leave
