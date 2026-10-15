@@ -48,7 +48,7 @@ GB_FRAMES ?= 700 1000
 # GBA: bare arm-none-eabi GCC, no C library. The GBA gives the core a
 # framebuffer the size of its screen and shows the phone's LCD at 2x, and
 # the game in the full-screen variant at 3x, which its display hardware
-# scales (see platform/gba/main.c).
+# scales (see ../common/platform/gba/main.c).
 GBA_FB := -DLCD_FB_WIDTH=240 -DLCD_FB_HEIGHT=160 -DLCD_ZOOM=2 -DLCD_GAME_ZOOM=3
 ARM_CC ?= arm-none-eabi-gcc
 ARM_OBJCOPY ?= arm-none-eabi-objcopy
@@ -92,7 +92,7 @@ GBA_TEST_ROM := $(BUILD)/nokia3310-keys.gba
 KEYS ?= sdsss
 # The game without the menus, for tools that drive it directly.
 GAME_SRC := $(filter-out core/menu.c $(COMMON)/core/font.c,$(CORE_SRC))
-GBA_SRC := platform/gba/crt0.s platform/gba/main.c $(COMMON)/platform/gba/libc.c $(COMMON)/platform/gba/native_fb.c \
+GBA_SRC := $(COMMON)/platform/gba/crt0.S $(COMMON)/platform/gba/main.c $(COMMON)/platform/gba/libc.c $(COMMON)/platform/gba/native_fb.c \
 	$(CORE_SRC) $(ASSET_SRC) $(BUILD)/gba/native_data.c
 
 # The recorded Space Impact run the core is checked against: the keys, the
@@ -442,7 +442,8 @@ run-gb: $(GB_ROM)
 
 $(BUILD)/gba/nokia3310.elf $(BUILD)/gba/nokia3310-keys.elf: $(GBA_SRC) $(CORE_HDR) $(COMMON)/platform/gba/gba.ld FORCE
 	@mkdir -p $(BUILD)/gba
-	$(ARM_CC) $(ARM_CFLAGS) $(GBA_FB) -Icore -I$(COMMON)/core -I$(ASSETS) -I$(COMMON)/platform/gba/include -DNATIVE_PLATFORM_FB '-DSTART_KEYS="$(if $(findstring keys,$@),$(KEYS))"' -nostdlib -T $(COMMON)/platform/gba/gba.ld -Wl,--no-warn-rwx-segments -Wl,-Map,$(basename $@).map -o $@ $(GBA_SRC) -lgcc
+	$(ARM_CC) $(ARM_CFLAGS) $(GBA_FB) -Icore -I$(COMMON)/core -I$(ASSETS) -I$(COMMON)/platform/gba/include -DNATIVE_PLATFORM_FB \
+		'-DGBA_TITLE="NOKIA3310"' '-DGBA_CODE="N33E"' "-DGBA_SAVE_ID='3'" '-DSTART_KEYS="$(if $(findstring keys,$@),$(KEYS))"' -nostdlib -T $(COMMON)/platform/gba/gba.ld -Wl,--no-warn-rwx-segments -Wl,-Map,$(basename $@).map -o $@ $(GBA_SRC) -lgcc
 
 # The full-screen menus made at build time, drawn by the host build of the
 # core at the GBA's size (native_tiles.h).
@@ -465,7 +466,7 @@ MGBA ?= ../tools/mgba
 # Screen frames to run before the screenshot; the game starts at power-on.
 SHOT_FRAMES ?= 300
 
-$(BUILD)/gba_shot: tools/gba_shot.c
+$(BUILD)/gba_shot: $(COMMON)/tools/gba_shot.c
 	@test -f "$(MGBA)/build/libmgba.a" || { echo "Missing $(MGBA)/build/libmgba.a: run ../common/scripts/setup-mgba.sh"; exit 1; }
 	@mkdir -p $(BUILD)
 	$(CC) -O2 -I$(MGBA)/include -I$(MGBA)/build/include -o $@ $< $(MGBA)/build/libmgba.a -lm -framework CoreFoundation
