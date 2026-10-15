@@ -94,8 +94,6 @@ enum {
 #if PHONE_SPARKLE
 static const uint8_t sparkle_frames[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 10, 10, 9, 9, 10, 10, 9, 10 };
 #define SPARKLE_STEPS (sizeof sparkle_frames)
-#else
-#define SPARKLE_STEPS 1
 #endif
 
 /* Memory's and Logic's cursor changes between plain and inverted this
@@ -1342,6 +1340,7 @@ uint8_t menu_tick(void)
             screen = SCREEN_GAME;
             return 1;
         }
+#if PHONE_SPARKLE
         play_us += FRAME_US;
         while (play_us >= PHONE_TICK_US) {
             play_us -= PHONE_TICK_US;
@@ -1354,6 +1353,7 @@ uint8_t menu_tick(void)
                 }
             }
         }
+#endif
         break;
     case SCREEN_GAME_OVER:
         if (--page_ticks == 0) {
