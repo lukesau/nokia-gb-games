@@ -1,11 +1,11 @@
 /* GBA layer, shared by the ports. The core's framebuffer is the whole
    240x160 screen, shown in bitmap mode 3. The core names a part of it to
    magnify: the phone's LCD is shown at LCD_ZOOM in the middle of the
-   screen (the 3310's 84x48 and the 3410's 96x65 at 2x), and where the
+   screen (the 84x48 LCDs and the 3410's 96x65 at 2x), and where the
    port asks for more, LCD_GAME_ZOOM, the game in the full-screen mode by
-   the display hardware's scaling (the 3310's at 3x, which fills the
-   screen's width with the LCD's first 80 columns); the full-screen menus
-   are shown as they are. In the menus A is the phone's Navi key, B is its
+   the display hardware's scaling (at 3x, which fills the screen's width
+   with the LCD's first 80 columns); the full-screen menus are shown as
+   they are. In the menus A is the phone's Navi key, B is its
    C key and the D-pad scrolls; Start on the first screen picks the
    full-screen mode. What the keys do in a game is the core's (menu.h). */
 #include <stdint.h>
@@ -185,6 +185,7 @@ void platform_tone(uint8_t note)
     REG_SOUND2CNT_H = (uint16_t)(0x8000 | (2048 - (((tone_divider[note % 12] >> note / 12) + 4) >> 3)));
 }
 
+#if GAMES_OPTIONS
 uint8_t platform_options_load(struct game_options *out)
 {
     uint8_t flags = SAVE[SAVE_OPTIONS];
@@ -206,6 +207,7 @@ void platform_options_save(const struct game_options *in)
     SAVE[SAVE_OPTIONS] = flags;
     SAVE[SAVE_OPTIONS + 1] = OPTIONS_CHECK(flags);
 }
+#endif
 
 /* The motor of a rumble cartridge, or of a flash cart that acts as one. */
 void platform_rumble(uint8_t on)
@@ -345,7 +347,7 @@ static void present(void)
 {
     uint8_t all = lcd_zoom_x != shown_x || lcd_zoom_y != shown_y || lcd_zoom_w != shown_w || lcd_zoom_h != shown_h
                   || lcd_zoom_by != shown_by;
-    uint8_t hardware;
+    uint8_t hardware, was_hardware = LCD_GAME_ZOOM > LCD_ZOOM && shown_w && shown_by == LCD_GAME_ZOOM, blank;
     int cx, cy, cover;
 
     shown_x = lcd_zoom_x;
@@ -354,6 +356,15 @@ static void present(void)
     shown_h = lcd_zoom_h;
     shown_by = lcd_zoom_by;
     hardware = LCD_GAME_ZOOM > LCD_ZOOM && shown_w && shown_by == LCD_GAME_ZOOM;
+    /* Into or out of the hardware's magnification the bitmap is drawn
+       for the other scale, over a few frames: the screen is blanked till
+       it and the registers are in place, not shown at the wrong size. */
+    blank = all && (hardware || was_hardware);
+    if (blank) {
+        while (REG_VCOUNT < SCREEN_H)
+            ;
+        REG_DISPCNT = 0x0483; /* mode 3, BG2 on, forced blank */
+    }
     for (cy = 0; cy < LCD_CELLS_Y; cy++) {
         for (cx = 0; cx < LCD_CELLS_X; cx++) {
             uint8_t *dirty = &lcd_dirty[cx + LCD_CELLS_X * cy];
@@ -384,6 +395,8 @@ static void present(void)
     if (all)
         zoom_hardware(hardware);
 #endif
+    if (blank)
+        REG_DISPCNT = 0x0403;
 }
 
 /* The buttons down, as menu_held wants them. */

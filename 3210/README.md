@@ -56,16 +56,16 @@ same, and live in `../common/classic/`; this directory holds what is the
   - `platform/host/`: host layer used for verification; writes LCD frames
     as PGM in the layout of the fork's MAME frames.
   - `platform/gb/`: Game Boy layer (84x48 drawn 1:1 as background tiles).
-  - `platform/gba/`: GBA layer (bitmap mode 3; the phone's screen and the
-    full-screen board are shown at 2x, Rotation and Memory in the
-    full-screen mode at 3x by the hardware's scaling, the full-screen menus
-    as they are), with its own startup code.
   - `scripts/setup-sameboy.sh`: clones upstream SameBoy at a pinned commit
     into the repository's ignored `tools/SameBoy/` and builds its headless
     tester; `scripts/copy-to-cards.sh` is `make cards`.
   - `tests/`: host checks that need no firmware.
 - `../common/`: what every port shares (the framebuffer and drawing, fonts,
-  the full-screen menus' tiles, `gbafix.py`, `check_gb_frame.py`).
+  the full-screen menus' tiles, `gbafix.py`, `check_gb_frame.py`), and the
+  GBA layer all four ports use, `../common/platform/gba/` (bitmap mode 3;
+  the phone's screen and the full-screen board are shown at 2x, Rotation
+  and Memory in the full-screen mode at 3x by the hardware's scaling, the
+  full-screen menus as they are), with its startup code.
 - `scripts/make-banner.sh`: regenerates the banner above from headless
   emulator runs of both ROMs (needs ImageMagick).
 - `tests/test_boards.c`: Memory's and Rotation's incremental drawing.
@@ -81,7 +81,7 @@ brew install sdcc rgbds arm-none-eabi-gcc
 
 - Game Boy: SDCC's `sm83` port with its stock startup code, and `makebin`
   for the cartridge header. No GBDK.
-- GBA: bare `arm-none-eabi-gcc` with no C library; `../common/classic/platform/gba/`
+- GBA: bare `arm-none-eabi-gcc` with no C library; `../common/platform/gba/`
   supplies the startup code, the linker script and `memset`/`memcpy`.
 - Emulators: SameBoy's tester for headless Game Boy frames and mGBA's core
   library for headless GBA frames (`../common/scripts/setup-mgba.sh`, needs cmake);

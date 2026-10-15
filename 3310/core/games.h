@@ -10,6 +10,8 @@
 
 /* The phone's timers count in units of 249/32 ms. */
 #define GAMES_UNIT_US 7781
+/* The games' options (Sounds, Lights, Shakes), which a platform saves. */
+#define GAMES_OPTIONS 1
 
 /* The settings the games follow: a sound is only played and the vibrator
    only run when its switch is on. menu.c loads and keeps them. */

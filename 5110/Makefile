@@ -5,6 +5,7 @@ PHONE := 5110
 # Your own NSE-1 v5.28 dump (raw .fls or the swap16 image); see README.md.
 DUMP ?= ../../../roms/noki5110/5110f528a.fls
 GBA_CODE := N51E
+GBA_SAVE_ID := 5
 PHONE_SRC :=
 CLASSIC_SRC := logic.c
 
