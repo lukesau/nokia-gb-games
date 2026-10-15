@@ -14,7 +14,20 @@ menu, and so it is here.
 Not yet: the 5110's own menus where they differ from the 3210's. MAME does
 not reach them on v5.28, so they are being mapped from the firmware; until
 then the main menu and the Top score page are the 3210's without its
-animations. Logic is not yet checked against the 5110 running it.
+animations. A won Logic game shows the phone's "YOU WON!" text, which is
+a guess at what the phone's games framework does with it.
+
+## Checked against the phone
+
+MAME does not run v5.28, so Logic is checked against the 5110's own Logic
+run natively in the fork's Unicorn harness (branch `games/re-5110`,
+`tools/dct3_5110_game_harness.py`). `make golden-logic` records its frames
+into the ignored `golden/`, 356 of them over all eight levels: games of
+random keys past the ten tries' scroll, and a game per level that types the
+secret in (the firmware ends it, posting its game-over status). `make
+check-golden` replays them on the port, which draws the same to the pixel.
+`DCT3_RE` names the fork's checkout and `HARNESS_PYTHON` a Python with
+unicorn.
 
 ## Building
 
@@ -24,7 +37,7 @@ make gba   # build/nokia5110.gba
 ```
 
 `DUMP` defaults to `../../../roms/noki5110/5110f528a.fls`. The other
-targets are the 3210's (`make help`).
+targets are the 3210's (`make help`), plus `make golden-logic`.
 
 ## Firmware
 

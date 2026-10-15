@@ -9,3 +9,13 @@ PHONE_SRC :=
 CLASSIC_SRC := logic.c
 
 include ../common/classic/classic.mk
+
+# The RE fork, for its Unicorn harness, and a Python with unicorn in it.
+DCT3_RE ?= ../../..
+HARNESS_PYTHON ?= $(DCT3_RE)/.venv/bin/python
+
+# MAME does not run v5.28, so Logic's goldens come from the harness.
+golden-logic:
+	$(HARNESS_PYTHON) tools/golden_logic.py $(DCT3_RE) "$(DUMP)" $(GOLDEN)
+
+.PHONY: golden-logic
