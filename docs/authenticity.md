@@ -194,7 +194,7 @@ substance. What is not:
 | Hand paths and drawing | traced | `bantumi_hand_path_2b1a04`, `bantumi_draw_hand_2b1520` | frames |
 | Hand widths 12 and 11 | measured | the RAM descriptors were not read | frames |
 | The phone's search: depth, 100 steps a tick, move order, its two mistakes, the hint | traced + measured | `0x2dd3bc`, `0x2dd5ac`, `0x2dd438`, `0x2dd28e`; 112 of 112 searches modelled | frames (level 4 never run) |
-| The search in Game Boy assembly | port | `platform/gb/search.s` | only against the host |
+| The search in Game Boy assembly | port | `common/bantumi/search.s` | only against the host |
 | Winner's store blinking | traced | | frames |
 | Loser's store | port, drawn steady | the phone blinks it through mode 5 | — |
 | Game over pages (won, lost, draw) | data + measured | message `0x5134`'s handler not traced | no |
@@ -232,6 +232,26 @@ are listed here.
 | Space Impact's Instructions demos: firing, the keys on a keypad, a bonus | traced + data | `0x259a90`, `0x25c6d4`, `0x259d30`; the bonus chapter `0x4ad390`, the keypad `0x4b4a80` and pointer `0x4b4a98` | frames, sounds (`golden/si-i`) |
 | Instructions pages around the demos: More or Down past a text's last page starts its demo, a demo's end or any key leads to the next text, C back to the menu, a fourth text with Exit only, Up and Down page | measured | the games framework that sends event 9 and turns keys into event 3 is not traced; Up during a demo was once seen to be ignored | no |
 | Full-screen mode, cart-RAM saves, Lights | port | | no |
+
+### Bantumi (3410)
+
+The map is the fork's `games_bantumi_3410.md`; the code is the 3310's
+(`common/bantumi/bantumi.c`) with the 3410's drawing.
+
+| Feature | Source | Evidence | Golden |
+|---|---|---|---|
+| Rules, hand, sowing, captures, the search and its mistakes | traced | `0x2e9340`, `0x2e91c0`, `0x2e92b4`, `0x2e8b84`, `0x3b8180`..`0x3b8438` | frames (`golden/bantumi-a`..`d`, levels 1, 2, 3, 5) |
+| Board, digits, hand through its mask, thinking picture, draw order and modes | traced + data | `0x2e899e`, `0x2e8830`, `0x2e879c`, `0x2e8718`; the hands' RAM descriptors read in MAME | frames |
+| Intro, game-over pause, blink, closing and slide out | traced | `0x2e9340`; the blink's power-on counter (5) read in MAME | frames |
+| Pass on the first turn (#), hint (*) | traced | `0x2e9340`, `0x2e8d54` | frames (`bantumi-a`) |
+| Pause and Continue, still until a key | traced + measured | `0x2e9118`, `0x2e8dc4`; the framework's New game before Continue and the held timer seen in MAME | frames (`bantumi-c`) |
+| Sounds: bean, game over won or lost each pause tick | traced + data | `0x3b2510`, ids `0xfa9`, `0xfa4`, `0xfa2` | sounds |
+| Title | traced + measured | `0x3eb790`, `0x3eb6d4`; the small picture's places read in RAM | frames (`bantumi-t`) |
+| Instructions demos | traced + data | `0x2e8fbc`, `0x2e9a10` | frames, sounds (`bantumi-i`) |
+| Instructions pages, the first again after the fifth demo | measured | the framework is not traced | menus (first text) |
+| Menu, Game options, No. of beans, Level page | measured + data | strings 130..133, 750 | menus |
+| Redraw after every event but a closing one, a demo's first and Menu | measured | the framework is not traced | frames |
+| The search in Game Boy assembly | port, the 3310's | `common/bantumi/search.s` | only against the host |
 
 ## Mismatches found
 

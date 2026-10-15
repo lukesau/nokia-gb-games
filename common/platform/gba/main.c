@@ -1,12 +1,13 @@
-/* GBA layer. The core's framebuffer is the whole 240x160 screen, shown in
-   bitmap mode 3. The core names a part of it to magnify: the phone's 84x48
-   LCD is shown at 2x in the middle of the screen, and the game in the
-   full-screen mode at 3x by the display hardware's scaling, which fills the
-   screen's width with the LCD's first 80 columns; the full-screen menus are
-   shown as they are. In the menus A is the phone's Navi key, B is its C
-   key and the D-pad scrolls; Start on the first screen picks the
-   full-screen mode. In the game the D-pad moves the ship, A fires, B uses
-   the special weapon and Start or Select pauses. */
+/* GBA layer, shared by the ports. The core's framebuffer is the whole
+   240x160 screen, shown in bitmap mode 3. The core names a part of it to
+   magnify: the phone's LCD is shown at LCD_ZOOM in the middle of the
+   screen (the 3310's 84x48 and the 3410's 96x65 at 2x), and where the
+   port asks for more, LCD_GAME_ZOOM, the game in the full-screen mode by
+   the display hardware's scaling (the 3310's at 3x, which fills the
+   screen's width with the LCD's first 80 columns); the full-screen menus
+   are shown as they are. In the menus A is the phone's Navi key, B is its
+   C key and the D-pad scrolls; Start on the first screen picks the
+   full-screen mode. What the keys do in a game is the core's (menu.h). */
 #include <stdint.h>
 
 #include "game.h"
@@ -52,6 +53,7 @@
 /* Most frames of game time made up at once after a slow draw. */
 #define MAX_CATCH_UP 6
 
+#if LCD_GAME_ZOOM > LCD_ZOOM
 /* The games on the phone's LCD in the full-screen variant are magnified by
    the display hardware: mode 3's one layer, BG2, can be scaled, so the
    framebuffer is drawn as it is and BG2 is set to step a third of a pixel
@@ -65,6 +67,7 @@
 #endif
 #define ZOOM_STEP 85
 #define ZOOM_START 82
+#endif
 
 #define RGB(r, g, b) ((uint16_t)((r) | (g) << 5 | (b) << 10))
 #define COLOR_CLEAR RGB(19, 24, 15)
@@ -85,15 +88,16 @@
 #endif
 
 /* Battery-backed cartridge RAM, one byte at a time: a two-byte signature,
-   then one four-byte record per game laid out as the phone stores them: top
-   score high byte, low byte, level (the option in its top four bits:
-   Snake II's maze) and a check byte; then the games'
-   settings as one byte of switches (Sounds, Lights, Shakes in bits 0 to
-   2) and its check byte; then one more record, Pairs II's Puzzle's (Time
-   trial has the game's). */
+   'N' and the port's GBA_SAVE_ID, then one four-byte record per game laid
+   out as the phone stores them: top score high byte, low byte, level (the
+   option in its top four bits: Snake II's maze) and a check byte; then the
+   games' settings as one byte of switches (Sounds, Lights, Shakes in bits
+   0 to 2) and its check byte; then a record for each of the core's slots
+   past the games: on the 3310 Pairs II's Puzzle's (Time trial has the
+   game's), on the 3410 Snake II's top score per maze. */
 #define SAVE ((volatile uint8_t *)0x0e000000)
 #define SAVE_SIGNATURE_0 'N'
-#define SAVE_SIGNATURE_1 '3'
+#define SAVE_SIGNATURE_1 GBA_SAVE_ID
 #define SAVE_OPTIONS (2 + GAME_COUNT * 4)
 #define OPTIONS_CHECK(flags) ((uint8_t)((flags) ^ 0xa5))
 
@@ -209,6 +213,7 @@ void platform_rumble(uint8_t on)
     GPIO_DATA = on ? GPIO_RUMBLE : 0;
 }
 
+/* The 3310's core says when a game starts; nothing to do here. */
 void platform_game_starts(uint8_t game)
 {
     (void)game;
@@ -301,6 +306,7 @@ static int cell_magnified(int cx, int cy)
     return x + 8 > shown_x && x < shown_x + shown_w && y + 8 > shown_y && y < shown_y + shown_h;
 }
 
+#if LCD_GAME_ZOOM > LCD_ZOOM
 /* Sets BG2 to show the magnified rectangle LCD_GAME_ZOOM times bigger in
    the middle of the screen, or the framebuffer as it is. */
 static void zoom_hardware(uint8_t on)
@@ -331,6 +337,7 @@ static void zoom_hardware(uint8_t on)
     REG_BG2X = x;
     REG_BG2Y = y;
 }
+#endif
 
 /* Redraws the 8x8 cells of lcd_fb drawn to since the last call, or the
    whole screen when what is magnified changes. */
@@ -346,7 +353,7 @@ static void present(void)
     shown_w = lcd_zoom_w;
     shown_h = lcd_zoom_h;
     shown_by = lcd_zoom_by;
-    hardware = shown_w && shown_by == LCD_GAME_ZOOM;
+    hardware = LCD_GAME_ZOOM > LCD_ZOOM && shown_w && shown_by == LCD_GAME_ZOOM;
     for (cy = 0; cy < LCD_CELLS_Y; cy++) {
         for (cx = 0; cx < LCD_CELLS_X; cx++) {
             uint8_t *dirty = &lcd_dirty[cx + LCD_CELLS_X * cy];
@@ -373,8 +380,10 @@ static void present(void)
         }
     }
     /* After the picture, so that what the hardware magnifies is in place. */
+#if LCD_GAME_ZOOM > LCD_ZOOM
     if (all)
         zoom_hardware(hardware);
+#endif
 }
 
 /* The buttons down, as menu_held wants them. */

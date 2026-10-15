@@ -3,6 +3,7 @@
 #include "snake2.h"
 #include "title.h"
 #include "native_gb.h"
+#include "menu_header.h"
 
 #define MBC_ROM_BANK (*(volatile uint8_t *)0x2000)
 
@@ -171,5 +172,35 @@ void far_native_palette(uint8_t shades)
 
     far_bank(BANK_NATIVE);
     native_palette(shades);
+    far_bank(was);
+}
+
+static void far_text_copy_near(char *to, const char *from, uint8_t size)
+{
+    for (; size > 1 && *from; size--)
+        *to++ = *from++;
+    *to = 0;
+}
+
+/* The Instructions' texts are with the full-screen menus. */
+void far_text_copy(char *to, const char *from, uint8_t size)
+{
+    uint8_t was = far_mapped;
+
+    far_bank(BANK_NATIVE);
+    far_text_copy_near(to, from, size);
+    far_bank(was);
+}
+
+/* The menu pages' header and its font are there too: the title, in the
+   menus' bank, is copied out first. */
+void far_menu_header(const char *title, uint8_t number)
+{
+    char text[MENU_HEADER_MAX + 1];
+    uint8_t was = far_mapped;
+
+    far_text_copy_near(text, title, sizeof text);
+    far_bank(BANK_NATIVE);
+    menu_header_draw(text, number);
     far_bank(was);
 }

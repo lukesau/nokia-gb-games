@@ -414,8 +414,8 @@ the ignored `golden/`.
   the menus share), `games` (keys and timers to game events, the settings
   the games follow and the vibrator's timer), `sound` (the notes of the
   sound in progress), `rand`.
-- `platform/host/` has the tools above; `platform/gb/` and `platform/gba/`
-  are the cartridges.
+- `platform/host/` has the tools above; `platform/gb/` is the Game Boy
+  cartridge, and `../common/platform/gba/` the GBA's, which the 3410 shares.
 - `tools/extract_assets.py` copies the games' data regions, their sounds, the
   fonts, the English text and the menus' pictures, the Top score page's
   and the Done note's animations among them, out of the dump; the game

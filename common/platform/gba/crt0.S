@@ -1,13 +1,17 @@
 @ GBA cartridge header and startup. tools/gbafix.py fills in the header
-@ checksum (and the logo, when given one) after linking.
+@ checksum (and the logo, when given one) after linking. The port's
+@ Makefile names the cartridge: GBA_TITLE, up to 12 characters, and
+@ GBA_CODE, 4.
     .section .crt0, "ax"
     .arm
     .global _start
 _start:
     b       reset
     .fill   156, 1, 0           @ logo
-    .ascii  "NOKIA3310\0\0\0"   @ title
-    .ascii  "N33E"              @ game code
+.Ltitle:
+    .ascii  GBA_TITLE
+    .fill   12 - (. - .Ltitle), 1, 0
+    .ascii  GBA_CODE            @ game code
     .ascii  "00"                @ maker code
     .byte   0x96                @ fixed value
     .byte   0                   @ main unit code

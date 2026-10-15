@@ -1,11 +1,11 @@
-# Nokia 3410 games for Game Boy
+# Nokia 3410 games for Game Boy and GBA
 
 ![The first screen, the Select game list and Snake II being played on the Game Boy, at the phone's size and in full screen, where Snake II has its bigger board; Space Impact, Bumper, Bantumi and Link5's panels are blank, as they are not here yet](docs/banner.png)
 
 The Nokia 3410 (NHM-2 v5.46) follow-up to the [3310's](../3310/README.md): the 3410's built-in games
 re-implemented in C from a map of the firmware, with their data read from
 your own dump at build time. One portable core runs on the host and as a
-Game Boy ROM (`.gb`); a GBA build is to come.
+Game Boy ROM (`.gb`) and a GBA ROM (`.gba`).
 
 What is there so far:
 
@@ -34,17 +34,28 @@ What is there so far:
   drawn straight into the tiles' rows from pictures the build makes
   ready, the same to the pixel, and keeps the phone's pace with a picture
   nearly every tick, about nine a second where the phone shows ten;
+- Bantumi: the 3410's game, the 3310's on the 3410's graphics library and
+  a bigger board, with the 3310's port's code (`../common/bantumi/`), frame
+  for frame as the phone plays it at every level, its hints, the pass on
+  the first turn (#), a pause and Continue, the board sliding in and out;
+  its title, its menu (Continue after a pause, New game, Options with the
+  beans and the level, Instructions), all to the pixel, and the
+  Instructions' five texts with their five demos, frame for frame. On the
+  Game Boy the phone's search at the hardest level runs at about 60% of
+  the phone's pace on a DMG and at full pace on a Game Boy Color or
+  Advance;
 - the games' Settings (Game sounds, Game lights, Shakes, Club Nokia ID),
   the vibrator as a rumble motor (Snake II's from a death to the second
   blink, Space Impact's for three ticks, as on the 3410, but half as
   long, see `../common/core/rumble.h`), and the games' sounds: Snake
-  II's eat, death and game over, and every one of Space Impact's, which
-  its replays check against the phone's, call for call;
-- the top score and the chosen level and maze, kept in battery-backed
-  cartridge RAM.
+  II's eat, death and game over, and every one of Space Impact's and
+  Bantumi's, which their replays check against the phone's, call for
+  call;
+- the top score and the chosen level, maze and beans, kept in
+  battery-backed cartridge RAM.
 
-Not yet: Bumper, Bantumi and Link5, the Chapters note's tick, the main
-menu's Games icon and the lists' sliding highlight.
+Not yet: Bumper and Link5, the Chapters note's tick, the main menu's
+Games icon and the lists' sliding highlight.
 
 The game is shown at the phone's size, in the middle of the Game Boy's
 screen. Start on the first screen picks the full-screen variant, whose
@@ -54,27 +65,37 @@ screen, 39 by 33 cells, with the snake, the food, the creatures and the
 score at the phone's size and speed, the mazes moved out in proportion to
 fill it, and top scores of its own.
 
-| | Menus | Snake II | Space Impact |
-|---|---|---|---|
-| D-pad | up and down | steer (2, 4, 6, 8) | fly (8, 0, *, #) |
-| A | select | turn clockwise (#) | fire (1) |
-| B | back | turn anticlockwise (*) | special weapon (4) |
-| Start, Select | select | pause | pause |
+The GBA uses the GBA layer the 3310 shares (`../common/platform/gba/`):
+the phone's LCD at 2x, 192 by 130, in the middle of its screen, and the
+full-screen variant's menus at the GBA's size, its Snake II board 29 by 17
+cells shown at 2x over the whole screen. The keys are the same; the
+vibrator drives a rumble cartridge's motor.
+
+| | Menus | Snake II | Space Impact | Bantumi |
+|---|---|---|---|---|
+| D-pad | up and down | steer (2, 4, 6, 8) | fly (8, 0, *, #) | left and right move the hand (4, 6), up passes the first move (#) |
+| A | select | turn clockwise (#) | fire (1) | sow (5) |
+| B | back | turn anticlockwise (*) | special weapon (4) | hint, at level 1 (*) |
+| Start, Select | select | pause | pause | pause |
 
 See [docs/plan.md](docs/plan.md) and, in the RE fork,
-`docs/games_applications_3410.md`, `docs/games_snake2_3410.md` and
-`docs/games_si_3410.md`.
+`docs/games_applications_3410.md`, `docs/games_snake2_3410.md`,
+`docs/games_si_3410.md` and `docs/games_bantumi_3410.md`.
 
 ## Building
 
 `make dump` makes the flash image from the Wintesla files below (it needs
 the RE fork, in whose `ports/` directory this repository is kept, or
-`DCT3_RE=` pointing at it; from here it is `../../..`), `make gb` the ROM, `make run-gb` opens it in SameBoy. `make test` runs the host
-checks; `make check-gb` runs the ROM headlessly against the host's frames.
-`make golden-snake` and `make golden-si` record Snake II and Space Impact
-games in the fork's MAME (`golden-si-menus` the title and High scores,
-`golden-si-demos` the Instructions' demos) and `make check-golden` replays
-them through the core; `make check-menus` compares
+`DCT3_RE=` pointing at it; from here it is `../../..`), `make gb` the ROM, `make run-gb` opens it in SameBoy; `make gba` and
+`make run-gba` the same for the GBA, in mGBA. `make test` runs the host
+checks; `make check-gb` and `make check-gba` run the ROMs headlessly
+against the host's frames (`check-gba` with mGBA's core, which
+`../common/scripts/setup-mgba.sh` builds).
+`make golden-snake`, `make golden-si` and `make golden-bantumi` record
+Snake II, Space Impact and Bantumi games in the fork's MAME
+(`golden-si-menus` Space Impact's title and High scores, `golden-si-demos`
+and `golden-bantumi-demos` the Instructions' demos, the latter with
+Bantumi's title) and `make check-golden` replays them through the core; `make check-menus` compares
 the menu pages with the phone's in `golden/menus/`.
 
 ## Firmware policy

@@ -1,9 +1,10 @@
 ;; The Game Boy's own version of Bantumi's search (search() in
-;; core/bantumi.c, which says what each part does): a level 5 search takes
-;; the phone's hundred steps a tick, more than the compiler's code can do
-;; in the Game Boy's time. The same steps on the same nodes, so that the
+;; bantumi.c, which says what each part does): a level 5 search takes the
+;; phone's hundred steps a tick, more than the compiler's code can do in
+;; the Game Boy's time. The same steps on the same nodes, so that the
 ;; phone's hand sets out on the same tick for the same pit. In Bantumi's
-;; bank; its state is core/bantumi.c's.
+;; bank, which each phone's Makefile puts for _CODE_BANTUMI; its state is
+;; bantumi.c's.
 	.module search
 	.globl	_bantumi_search_gb
 	.globl	_bantumi_cur, _bantumi_root, _bantumi_board
@@ -46,7 +47,7 @@ parent:
 child:
 	.ds	2
 
-	.area	_CODE_6
+	.area	_CODE_BANTUMI
 
 ;; hl = the node being worked on.
 cur_hl:

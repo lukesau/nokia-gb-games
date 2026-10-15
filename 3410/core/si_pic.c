@@ -6,7 +6,9 @@
 
 /* A platform short of work RAM may keep them elsewhere, as si.c its state,
    which comes after them. */
-#ifdef SI_PICS_AT
+#ifdef SI_PIC_RENDER_ONLY
+/* Only the drawing, built again where another game's pictures are. */
+#elif defined SI_PICS_AT
 __at(SI_PICS_AT) struct si_pic si_pics[SI_PIC_COUNT + 1];
 typedef char si_pics_fit[SI_PICS_AT + sizeof si_pics <= SI_STATE_AT ? 1 : -1];
 #else
@@ -16,6 +18,8 @@ struct si_pic si_pics[SI_PIC_COUNT + 1];
 /* The list: si_pics[0] holds its first (next) and last (prev). */
 #define FIRST si_pics[0].next
 #define LAST si_pics[0].prev
+
+#ifndef SI_PIC_RENDER_ONLY
 
 void si_pic_reset(void) SI_FAR
 {
@@ -76,6 +80,17 @@ uint8_t si_pic_create_line(uint8_t mode, int x, int y, int x2, int y2) SI_FAR
     if (id) {
         si_pics[id].x2 = (int16_t)x2;
         si_pics[id].y2 = (int16_t)y2;
+    }
+    return id;
+}
+
+uint8_t si_pic_create_masked(uint8_t mode, int x, int y, const struct si_masked_image *image) SI_FAR
+{
+    uint8_t id = alloc(SI_PIC_MASKED, mode, x, y);
+
+    if (id) {
+        si_pics[id].frames = &image->image;
+        si_pics[id].count = 1;
     }
     return id;
 }
@@ -143,6 +158,7 @@ void si_pic_next_frame(uint8_t id) SI_FAR
         p->frame = 0;
 }
 
+#endif
 
 static void plot(int x, int y, uint8_t set, uint8_t op)
 {
@@ -258,10 +274,8 @@ static void bitmap_band(const uint8_t *src, uint8_t cols, uint8_t x, int8_t band
     }
 }
 
-static void draw_bitmap(const struct si_pic *p, uint8_t op)
+static void draw_bitmap(const struct sprite_image *im, int16_t x, int16_t y, uint8_t op)
 {
-    const struct sprite_image *im = &p->frames[p->frame];
-    int16_t x = p->x, y = p->y;
     uint8_t w = im->w, left = im->h, col = 0, end = w, shift;
     const uint8_t *src;
     int8_t band;
@@ -353,8 +367,22 @@ void si_pic_render(void) SI_FAR
             continue;
         switch (p->kind) {
         case SI_PIC_BITMAP:
-            draw_bitmap(p, op);
+            draw_bitmap(&p->frames[p->frame], p->x, p->y, op);
             break;
+        case SI_PIC_MASKED: {
+            /* The mask's bits cleared (set, then flipped), then the
+               bitmap's set: its bits all lie within the mask's. */
+            const struct si_masked_image *m = (const struct si_masked_image *)p->frames;
+            struct sprite_image mask;
+
+            mask.bitmap = m->mask;
+            mask.w = m->image.w;
+            mask.h = m->image.h;
+            draw_bitmap(&mask, p->x, p->y, SI_OP_OR);
+            draw_bitmap(&mask, p->x, p->y, SI_OP_XOR);
+            draw_bitmap(&m->image, p->x, p->y, SI_OP_OR);
+            break;
+        }
         case SI_PIC_FILL:
             draw_fill(p, op);
             break;
