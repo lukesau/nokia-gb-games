@@ -1,17 +1,17 @@
-# Builds and checks the three phones' ports from the top. Each port is a
+# Builds and checks the four phones' ports from the top. Each port is a
 # project of its own in its directory with its own Makefile; these targets
 # run a target in every port that has it, all of them even when one fails,
 # and then name the ports that failed. `make -C 3310 <target>` runs one.
 
-PORTS := 3210 3310 3410
+PORTS := 3210 3310 3410 5110
 # The 3410's port has no GBA build yet.
-GBA_PORTS := 3210 3310
+GBA_PORTS := 3210 3310 5110
 
 .PHONY: help gb gba test check-golden check-menus check-gb check-gba cards setup clean
 
 help:
-	@echo "make gb             the Game Boy ROMs of all three ports"
-	@echo "make gba            the GBA ROMs (3210, 3310)"
+	@echo "make gb             the Game Boy ROMs of all four ports"
+	@echo "make gba            the GBA ROMs (3210, 3310, 5110)"
 	@echo "make test           the host checks of every port"
 	@echo "make check-golden   every port's games against recorded runs of the firmware"
 	@echo "make check-menus    the 3310's and 3410's menu pages against the phones' own"
