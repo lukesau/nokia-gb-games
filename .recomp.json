@@ -1,0 +1,20 @@
+{
+  "$schema": "https://recomp.fyi/schema/v1.json",
+  "game": "Nokia built-in games (Snake, Snake II, Space Impact, Bantumi, Pairs II, Memory, Rotation)",
+  "system": ["Nokia 3210", "Nokia 3310", "Nokia 3410"],
+  "type": "port",
+  "original": [
+    { "region": "World", "revision": "NSE-8/9 v6.00" },
+    { "region": "World", "revision": "NHM-5 v6.39" },
+    { "region": "World", "revision": "NHM-2 v5.46" }
+  ],
+  "project": "nokia-gb-games",
+  "status": "playable",
+  "targets": ["GB", "GBA"],
+  "approach": "Games re-implemented in C from a map of each phone's firmware, assets read from your own dump at build time",
+  "maintainers": [{ "name": "lukesau", "link": "https://github.com/lukesau" }],
+  "links": [
+    { "label": "Firmware maps", "url": "https://github.com/lukesau/nokia-dct3-re" }
+  ],
+  "notes": "3210 and 3310 games done on Game Boy and GBA, checked frame by frame against the firmware in MAME. 3410 Snake II and Space Impact on Game Boy, GBA next."
+}
