@@ -4,14 +4,13 @@
 # and then name the ports that failed. `make -C 3310 <target>` runs one.
 
 PORTS := 3210 3310 3410
-# The 3410's port has no GBA build yet.
-GBA_PORTS := 3210 3310
+GBA_PORTS := 3210 3310 3410
 
 .PHONY: help gb gba test check-golden check-menus check-gb check-gba cards setup clean
 
 help:
 	@echo "make gb             the Game Boy ROMs of all three ports"
-	@echo "make gba            the GBA ROMs (3210, 3310)"
+	@echo "make gba            the GBA ROMs"
 	@echo "make test           the host checks of every port"
 	@echo "make check-golden   every port's games against recorded runs of the firmware"
 	@echo "make check-menus    the 3310's and 3410's menu pages against the phones' own"
