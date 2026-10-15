@@ -5,6 +5,7 @@
 #include "game_assets.h"
 #include "lcd.h"
 #include "pgm.h"
+#include "phone.h"
 
 static int write_frame(const char *dir, const char *name)
 {
@@ -36,18 +37,24 @@ int main(int argc, char **argv)
     }
 
     lcd_clear();
+#if PHONE_ROTATION
     for (i = 0; i < 10; i++)
         lcd_blit_bitmap(i * 4, 0, 3, 5, games_digit_glyphs + i * 3);
+#endif
     lcd_blit_bitmap(0, 8, 7, 7, game_tile_back);
     lcd_blit_bitmap(10, 8, 7, 7, game_tile_cursor);
     lcd_blit_bitmap(20, 8, 4, 4, snake_food_bitmap);
+#if PHONE_ROTATION
     for (i = 0; i < 8; i++)
         lcd_blit_bitmap(i % 4 * 12, 20 + i / 4 * 12, 10, 10, game3_sprites + i * 20);
+#endif
     failed |= write_frame(dir, "sheet_small");
 
+#if PHONE_ROTATION
     lcd_clear();
     lcd_blit_bitmap(0, 0, LCD_WIDTH, LCD_HEIGHT, game3_background);
     failed |= write_frame(dir, "sheet_background");
+#endif
 
     return failed;
 }

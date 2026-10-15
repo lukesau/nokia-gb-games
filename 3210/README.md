@@ -41,26 +41,34 @@ That being said I got my firmware at firmware center
 
 ## Layout
 
-- `core/`: the portable game core (framebuffer and drawing primitives, the
-  phone's fonts and menus, `rand`, the event and platform interface in
-  `core/game.h`, and a test card).
-- `platform/host/`: host layer used for verification; writes LCD frames as
-  PGM in the layout of the fork's MAME frames.
-- `platform/gb/`: Game Boy layer (84x48 drawn 1:1 as background tiles).
-- `platform/gba/`: GBA layer (bitmap mode 3; the phone's screen and the
-  full-screen board are shown at 2x, Rotation and Memory in the full-screen
-  mode at 3x by the hardware's scaling, the full-screen menus as they are),
-  with its own startup code and linker script.
-- `tools/`: `extract_assets.py` reads the game graphics from your dump into
-  C arrays under the ignored `build/assets/`; `gbafix.py` finishes the GBA
-  header; `check_gb_frame.py` compares an emulator screenshot with a host
-  frame.
+The games and menus are shared with the 5110 port, whose games are the
+same, and live in `../common/classic/`; this directory holds what is the
+3210's own.
+
+- `core/`: Rotation, and `phone.h`, the 3210's list of games and what it
+  has (the Games icon, the Top score animation).
+- `Makefile`: names the phone and its dump, then includes
+  `../common/classic/classic.mk`.
+- `../common/classic/`: Snake, Memory and Logic, the phone's menus, `rand`,
+  the sounds, the event and platform interface in `game.h`;
+  `extract_assets.py`, which reads the pictures, fonts and text from your
+  dump into C arrays under the ignored `build/assets/`; and the layers:
+  - `platform/host/`: host layer used for verification; writes LCD frames
+    as PGM in the layout of the fork's MAME frames.
+  - `platform/gb/`: Game Boy layer (84x48 drawn 1:1 as background tiles).
+  - `platform/gba/`: GBA layer (bitmap mode 3; the phone's screen and the
+    full-screen board are shown at 2x, Rotation and Memory in the
+    full-screen mode at 3x by the hardware's scaling, the full-screen menus
+    as they are), with its own startup code.
+  - `scripts/setup-sameboy.sh`: clones upstream SameBoy at a pinned commit
+    into the repository's ignored `tools/SameBoy/` and builds its headless
+    tester; `scripts/copy-to-cards.sh` is `make cards`.
+  - `tests/`: host checks that need no firmware.
+- `../common/`: what every port shares (the framebuffer and drawing, fonts,
+  the full-screen menus' tiles, `gbafix.py`, `check_gb_frame.py`).
 - `scripts/make-banner.sh`: regenerates the banner above from headless
   emulator runs of both ROMs (needs ImageMagick).
-- `scripts/setup-sameboy.sh`: clones upstream SameBoy at a pinned commit
-  into the repository's ignored `tools/SameBoy/` and builds its headless
-  tester.
-- `tests/`: host checks that need no firmware.
+- `tests/test_boards.c`: Memory's and Rotation's incremental drawing.
 
 ## Toolchains
 
@@ -68,13 +76,13 @@ On macOS with Homebrew:
 
 ```
 brew install sdcc rgbds arm-none-eabi-gcc
-scripts/setup-sameboy.sh
+../common/classic/scripts/setup-sameboy.sh
 ```
 
 - Game Boy: SDCC's `sm83` port with its stock startup code, and `makebin`
   for the cartridge header. No GBDK.
-- GBA: bare `arm-none-eabi-gcc` with no C library; `platform/gba/` supplies
-  the startup code, the linker script and `memset`/`memcpy`.
+- GBA: bare `arm-none-eabi-gcc` with no C library; `../common/classic/platform/gba/`
+  supplies the startup code, the linker script and `memset`/`memcpy`.
 - Emulators: SameBoy's tester for headless Game Boy frames and mGBA's core
   library for headless GBA frames (`../common/scripts/setup-mgba.sh`, needs cmake);
   `make run-gb` and `make run-gba` open the ROMs in SameBoy.app and
@@ -116,7 +124,7 @@ mGBA's test ROMs (`make setup`) or the Omega card's, or from
 `make gba GBA_LOGO_FROM=/path/to/some.gba` (see
 `common/tools/gbafix.py`).
 
-`make cards` (`scripts/copy-to-cards.sh`) copies the ROMs to the root of
+`make cards` (`../common/classic/scripts/copy-to-cards.sh`) copies the ROMs to the root of
 the flash carts' SD cards: the `.gb` to `/Volumes/EZGB_FW4` and
 `/Volumes/EZGB_FW5`, the `.gba` to `/Volumes/OMEGADE`. It skips a card
 that is not mounted, refuses a `.gba` without the boot logo, checks each
