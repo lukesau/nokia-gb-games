@@ -20,12 +20,19 @@ enum {
 #define PHONE_ROTATION 0
 #define PHONE_LOGIC 1
 
-/* Taken from the 3210 until the 5110's menus are mapped: the main menu's
-   Games entry and its scrollbar. Neither the 3210's Games icon nor its Top
-   score animation is in the 5110's firmware. */
+/* The menus as the fork's docs/games_menus_5110.md maps them. Games is
+   entry 6 of the main menu's 9, with one still 64x14 icon. */
 #define GAMES_MENU_NUMBER 6
-#define GAMES_MENU_THUMB 12
-#define PHONE_GAMES_ICON 0
-#define PHONE_SPARKLE 0
+#define GAMES_MENU_THUMB 14
+#define PHONE_GAMES_ICON_ANIMATED 0
+#define GAMES_ICON_HEIGHT 14
+#define PHONE_SPARKLE 0       /* a plain Top score note */
+#define PHONE_LEVEL_STRIPES 1 /* striped Level bars on a 7-pixel pitch */
+/* The Top score and Game over pages close after this many phone ticks. */
+#define PHONE_TOP_SCORE_TICKS 376
+#define PHONE_GAME_OVER_TICKS 376
+/* Logic keeps no score (its score field is 0), so its menu has no Top
+   score. */
+#define GAME_HAS_TOP_SCORE(g) ((g) != GAME_LOGIC)
 
 #endif

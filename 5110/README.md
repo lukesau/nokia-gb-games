@@ -11,22 +11,33 @@ the 5110's list of games (`core/phone.h`) and its data read from your
 dump. Logic, which the 3210 carries but never offers, is in the 5110's
 menu, and so it is here.
 
-Not yet: the 5110's own menus where they differ from the 3210's. MAME does
-not reach them on v5.28, so they are being mapped from the firmware; until
-then the main menu and the Top score page are the 3210's without its
-animations.
+The menus are the 5110's where they differ from the 3210's (the fork's
+`docs/games_menus_5110.md`): the main menu's still Games icon, striped
+Level bars, a Top score note without the sparkle, no Top score for Logic,
+and the pages' own timeouts.
 
 ## Checked against the phone
 
-MAME does not run v5.28, so Logic is checked against the 5110's own Logic
-run natively in the fork's Unicorn harness (branch `games/re-5110`,
-`tools/dct3_5110_game_harness.py`). `make golden-logic` records its frames
-into the ignored `golden/`, 356 of them over all eight levels: games of
-random keys past the ten tries' scroll, and a game per level that types the
-secret in (the firmware ends it, posting its game-over status). `make
+MAME does not run v5.28, so the port is checked against the 5110's own code
+run natively in the fork's Unicorn harnesses (branch `games/re-5110`):
+
+- `make golden-menus`: 48 pages drawn by the phone's menu engine, games
+  applications and fonts (`tools/dct3_5110_menu_harness.py`): the main
+  menu, the list, each game's menu with its entries selected and with
+  Continue and Last view, every Level page, Top score, Instructions and the
+  game-over notes;
+- `make golden-logic`: 356 frames of Logic itself
+  (`tools/dct3_5110_game_harness.py`) over all eight levels: games of random
+  keys past the ten tries' scroll, and a game per level that types the
+  secret in.
+
+`make golden` records both into the ignored `golden/`, and `make
 check-golden` replays them on the port, which draws the same to the pixel.
 `DCT3_RE` names the fork's checkout and `HARNESS_PYTHON` a Python with
 unicorn.
+
+Not checked: the sounds (the firmware's tone ids are logged but not mapped
+to the port's sounds for the 5110) and the Instructions' later pages.
 
 ## Building
 
@@ -36,7 +47,7 @@ make gba   # build/nokia5110.gba
 ```
 
 `DUMP` defaults to `../../../roms/noki5110/5110f528a.fls`. The other
-targets are the 3210's (`make help`), plus `make golden-logic`.
+targets are the 3210's (`make help`), plus the `golden` ones above.
 
 ## Firmware
 

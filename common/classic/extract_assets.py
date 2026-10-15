@@ -71,6 +71,7 @@ PHONES = {
             ("memory_board_sizes", 0x2A7C48, 5 * 4, "Memory's board per level: columns, rows, two unused bytes"),
             ("game_speed_table", 0x2A7C3C, 9, "Snake speed per level, units of 10 ms"),
             ("snake_food_bitmap", 0x2A7C20, 4, "4x4"),
+            ("menu_games_icon", 0x2A13FC, 128, "the main menu's Games icon, 64x14 in 64x16, 64 bytes per 8 rows"),
         ],
         "font_chunk": 0x2B0414,
         "text_chunk": 0x2B4F28,

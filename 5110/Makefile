@@ -14,8 +14,14 @@ include ../common/classic/classic.mk
 DCT3_RE ?= ../../..
 HARNESS_PYTHON ?= $(DCT3_RE)/.venv/bin/python
 
-# MAME does not run v5.28, so Logic's goldens come from the harness.
+# MAME does not run v5.28, so the goldens come from the fork's harnesses:
+# the games menus and Logic's games.
+golden: golden-menus golden-logic
+
+golden-menus:
+	$(HARNESS_PYTHON) tools/golden_menus.py $(DCT3_RE) "$(DUMP)" $(GOLDEN)
+
 golden-logic:
 	$(HARNESS_PYTHON) tools/golden_logic.py $(DCT3_RE) "$(DUMP)" $(GOLDEN)
 
-.PHONY: golden-logic
+.PHONY: golden golden-menus golden-logic

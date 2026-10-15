@@ -11,7 +11,7 @@ this repository.
 | [Nokia 3210](3210/README.md) | Snake, Memory, Rotation | yes | yes |
 | [Nokia 3310](3310/README.md) | Snake II, Space Impact, Bantumi, Pairs II | yes | yes |
 | [Nokia 3410](3410/README.md) | Snake II so far; Space Impact is being mapped | yes | not yet |
-| [Nokia 5110](5110/README.md) | Memory, Snake, Logic (menus still the 3210's) | yes | yes |
+| [Nokia 5110](5110/README.md) | Memory, Snake, Logic | yes | yes |
 
 ![The 3210's first screen, list of games, and Rotation, Snake and Memory being played](3210/docs/banner.png)
 

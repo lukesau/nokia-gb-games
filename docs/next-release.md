@@ -37,7 +37,8 @@ Steps:
 3. Logic: the 3210 port's implementation of its dormant Logic, checked
    against the 5110 running it in the harness.
 4. The 5110's own menus: what differs from the 3210's (main menu entry and
-   icon, the Top score page), from the firmware.
+   icon, the Top score page), from the firmware. Done: the fork's
+   `docs/games_menus_5110.md`, applied and checked against its harness.
 
 ## Nokia 3410
 

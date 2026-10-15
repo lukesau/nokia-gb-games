@@ -31,23 +31,22 @@
 /* GAMES_MENU_NUMBER, the main menu's Games entry, and GAMES_MENU_THUMB,
    where that puts its scrollbar, come from phone.h. */
 
-#if PHONE_GAMES_ICON
-/* The main menu's Games icon is animated: its first picture stays for
-   GAMES_ICON_FIRST phone ticks, then the next twelve pictures follow every
-   GAMES_ICON_STEP, and the first comes back and stays. Measured in MAME,
-   where the first picture stays 1.08 s and the steps come 0.19 s apart.
-   Showing the entry again starts it over. */
+/* The main menu's Games icon. The 3210's is animated: its first picture
+   stays for GAMES_ICON_FIRST phone ticks, then the next twelve pictures
+   follow every GAMES_ICON_STEP, and the first comes back and stays.
+   Measured in MAME, where the first picture stays 1.08 s and the steps
+   come 0.19 s apart. Showing the entry again starts it over. The 5110's
+   is one picture. GAMES_ICON_HEIGHT comes from phone.h. */
 #define GAMES_ICON_X 10
 #define GAMES_ICON_Y 23
 #define GAMES_ICON_WIDTH 64
-#define GAMES_ICON_HEIGHT 16
 #define GAMES_ICON_BYTES 128
+#if PHONE_GAMES_ICON_ANIMATED
 #define GAMES_ICON_PICTURES 13
 #define GAMES_ICON_STEPS 13
 #define GAMES_ICON_FIRST 140
 #define GAMES_ICON_STEP 24
 #else
-/* No icon: the main menu is one picture. */
 #define GAMES_ICON_PICTURES 1
 #define GAMES_ICON_STEPS 0
 #define GAMES_ICON_FIRST 0
@@ -78,10 +77,11 @@ enum {
 #define FRAME_US (1000000ul / MENU_TICKS_PER_SECOND)
 #define PHONE_TICK_US 7781
 
-/* The Top score and Game over pages close by themselves: after 768 and
-   385 phone ticks, about six and three seconds. In menu_tick calls. */
-#define TOP_SCORE_TICKS ((uint16_t)(768ul * PHONE_TICK_US / FRAME_US))
-#define GAME_OVER_TICKS ((uint16_t)(385ul * PHONE_TICK_US / FRAME_US))
+/* The Top score and Game over pages close by themselves after the phone's
+   PHONE_TOP_SCORE_TICKS and PHONE_GAME_OVER_TICKS (phone.h). In menu_tick
+   calls. */
+#define TOP_SCORE_TICKS ((uint16_t)((uint32_t)PHONE_TOP_SCORE_TICKS * PHONE_TICK_US / FRAME_US))
+#define GAME_OVER_TICKS ((uint16_t)((uint32_t)PHONE_GAME_OVER_TICKS * PHONE_TICK_US / FRAME_US))
 
 /* The Top score page's animation in its top right corner: stars gather
    into a cup, which then flashes. A new picture every 25 phone ticks; the
@@ -307,20 +307,33 @@ static const char *game_name(uint8_t index)
     }
 }
 
+/* Whether the game's menu has an item: the second only while a game is
+   paused or has just ended, Top score only for a game that keeps one. */
+static uint8_t item_shown(uint8_t id)
+{
+    if (id == ITEM_RESUME)
+        return resume != RESUME_NONE;
+    if (id == ITEM_TOP_SCORE)
+        return GAME_HAS_TOP_SCORE(game);
+    return 1;
+}
+
 static uint8_t item_count(void)
 {
-    return resume ? 5 : 4;
+    return (uint8_t)(3 + item_shown(ITEM_RESUME) + item_shown(ITEM_TOP_SCORE));
 }
 
 /* The item at visible position `index`. The phone numbers Level first; the
    full-screen menus list the entries in the order they are used. */
 static uint8_t item_id(uint8_t index)
 {
+    static const uint8_t phone_order[] = { ITEM_LEVEL, ITEM_RESUME, ITEM_NEW_GAME, ITEM_TOP_SCORE, ITEM_INSTRUCTIONS };
     static const uint8_t native_order[] = { ITEM_RESUME, ITEM_NEW_GAME, ITEM_LEVEL, ITEM_TOP_SCORE, ITEM_INSTRUCTIONS };
+    const uint8_t *order = full_screen ? native_order : phone_order;
 
-    if (full_screen)
-        return native_order[resume ? index : index + 1];
-    return (uint8_t)(resume || index == 0 ? index : index + 1);
+    for (;; order++)
+        if (item_shown(*order) && !index--)
+            return *order;
 }
 
 static const char *item_name(uint8_t id)
@@ -404,10 +417,8 @@ static void draw_hint(void)
 
 static void draw_games_icon(void)
 {
-#if PHONE_GAMES_ICON
     lcd_blit_strips(GAMES_ICON_X, GAMES_ICON_Y, GAMES_ICON_WIDTH, GAMES_ICON_HEIGHT,
                     menu_games_icon + icon_steps % GAMES_ICON_PICTURES * GAMES_ICON_BYTES);
-#endif
 }
 
 static void draw_main(void)
@@ -614,6 +625,16 @@ static void draw_level(void)
 
     font_draw(&font_small_bold, 5, 0, text_level_title, 1);
     for (i = 0; i < level_count(); i++) {
+#if PHONE_LEVEL_STRIPES
+        /* A left edge and a top; striped every other row up to the chosen
+           level. */
+        uint8_t x = (uint8_t)(5 + i * 7);
+        uint8_t top = (uint8_t)(LEVEL_BASE_Y - 8 - i * 2), y;
+
+        lcd_fill_rect(x, top, 1, LEVEL_BASE_Y + 1 - top, 1);
+        for (y = top; y <= (i <= level_choice ? LEVEL_BASE_Y : top); y += 2)
+            lcd_fill_rect(x, y, 5, 1, 1);
+#else
         uint8_t x = (uint8_t)(5 + i * 8);
         uint8_t height = (uint8_t)(6 + i * 2);
 
@@ -621,6 +642,7 @@ static void draw_level(void)
         lcd_fill_rect(x + 1, LEVEL_BASE_Y, 5, 1, 1);
         if (i <= level_choice)
             lcd_fill_rect(x, LEVEL_BASE_Y - height - 1, 4, height, 1);
+#endif
     }
     draw_softkey(text_ok);
 }
@@ -932,7 +954,10 @@ void menu_init(void)
 static void game_menu_open(void)
 {
     screen = SCREEN_GAME;
-    item = item_top = full_screen ? 0 : 1;
+    item = full_screen ? 0 : 1;
+    /* The selection on the top row with Level scrolled out above, unless
+       every entry fits (5110 Logic). */
+    item_top = item_count() > VISIBLE_ROWS ? item : 0;
 }
 
 /* Back to the game's menu from the game. The phone keeps the selection's
