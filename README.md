@@ -65,7 +65,7 @@ The 3310 and 3410 followed the same way.
 
 The ports began as three repositories and were brought together here with
 their histories. They share one version number, `GAME_VERSION` in
-`common/core/version.h` (now v1.3), shown on each first screen and About
+`common/core/version.h` (now v1.4), shown on each first screen and About
 page.
 
 ## Building
