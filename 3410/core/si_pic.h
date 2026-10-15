@@ -1,4 +1,5 @@
-/* The 3410's graphics library, as much of it as Space Impact uses.
+/* The 3410's graphics library, as much of it as Space Impact and Bantumi
+   use.
 
    The phone's games draw with a tree of objects under the screen; Space
    Impact's pictures are all children of the root, drawn from the first to
@@ -23,6 +24,8 @@
 /* The draw modes the game uses, as the phone numbers them. */
 #define SI_MODE_NONE 0x00
 #define SI_MODE_COPY 0x10  /* set bits set, clear bits clear */
+#define SI_MODE_COPY_XOR 0x11 /* set bits flip: Bantumi's */
+#define SI_MODE_COPY_BLINK 0x14 /* copy, and the phone also blinks it: Bantumi's */
 #define SI_MODE_XOR 0x12   /* set bits flip */
 #define SI_MODE_BLINK 0x16 /* xor, and the phone also blinks it */
 #define SI_MODE_OR 0x20    /* set bits set */
@@ -32,7 +35,15 @@ enum {
     SI_PIC_FREE,
     SI_PIC_BITMAP,
     SI_PIC_FILL,
-    SI_PIC_LINE
+    SI_PIC_LINE,
+    SI_PIC_MASKED /* a bitmap drawn through a mask: frames is a struct si_masked_image */
+};
+
+/* A bitmap with a mask of the same size: drawn, the mask's set bits take
+   the bitmap's, the rest of the screen is left. Bantumi's hands. */
+struct si_masked_image {
+    struct sprite_image image;
+    const uint8_t *mask;
 };
 
 struct si_pic {
@@ -55,6 +66,7 @@ void si_pic_reset(void) SI_FAR;
 uint8_t si_pic_create(uint8_t mode, int x, int y, const struct sprite_image *frames, uint8_t count) SI_FAR;
 uint8_t si_pic_create_fill(uint8_t mode, int x, int y, int w, int h) SI_FAR;
 uint8_t si_pic_create_line(uint8_t mode, int x, int y, int x2, int y2) SI_FAR;
+uint8_t si_pic_create_masked(uint8_t mode, int x, int y, const struct si_masked_image *image) SI_FAR;
 void si_pic_free(uint8_t id) SI_FAR;
 /* Moves a picture to just after `after` in the list, or to the front when
    `after` is 0. */
@@ -69,7 +81,9 @@ void si_pic_next_frame(uint8_t id) SI_FAR;
 #define si_pic_image(id) (&si_pics[id].frames[si_pics[id].frame])
 
 /* What a mode does: the high nibble 1 or 2 draws (anything else nothing), a
-   low nibble with 2 in it xors, else 1 copies and 2 ors (0x3652c0). */
+   low nibble with 2 or 1 in it xors (0x11 copies with 0x10 added, which
+   the blitter does as xor), else 1 copies and 2 ors (0x3652c0); 4 in it
+   only blinks. */
 enum {
     SI_OP_NONE,
     SI_OP_COPY,
@@ -92,12 +106,15 @@ uint8_t si_pic_op(uint8_t mode)
         return SI_OP_OR;
     if (high != 1 && high != 2)
         return SI_OP_NONE;
-    if (mode & 2)
+    if (mode & 3)
         return SI_OP_XOR;
     return high == 1 ? SI_OP_COPY : SI_OP_OR;
 }
 
-/* Draws the list into sprite_screen, cleared first. */
+/* Draws the list into sprite_screen, cleared first. A platform whose
+   pictures are not always in reach (the Game Boy's banks) may build it a
+   second time, alone (SI_PIC_RENDER_ONLY), under another name, where
+   another game's pictures are. */
 void si_pic_render(void) SI_FAR;
 
 #endif

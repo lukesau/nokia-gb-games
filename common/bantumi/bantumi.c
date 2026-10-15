@@ -3,10 +3,8 @@
 #include <stddef.h>
 #include <string.h>
 
-#include "game_assets.h"
-#include "sprite.h"
-
-/* The pictures, by the firmware address of their 12-byte descriptors
+#ifndef BANTUMI_TREE
+/* The 3310's pictures, by the firmware address of their 12-byte descriptors
    (bitmap address, four unused bytes, width, height), and the hands'
    bitmaps, which the game copies to RAM and draws with its own sizes. */
 #define BOARDS 0x31d0c0ul        /* 84x48: the open board, two opening frames, the closed box */
@@ -27,6 +25,7 @@
 #define CLOSED_H 13
 
 #define SPRITES 45
+#endif
 #define THINK_X 34
 #define THINK_Y 16
 
@@ -89,7 +88,9 @@ struct bantumi {
     uint8_t turn;
     uint8_t countdown; /* ticks of the game-over pause */
     uint8_t level;
+#ifndef BANTUMI_TREE
     uint8_t flag, flag_ticks;
+#endif
     uint8_t sow_pit;
     uint8_t in_hand;
     uint8_t think_frame, think_ticks;
@@ -97,24 +98,30 @@ struct bantumi {
     uint8_t capture_store;
 
     uint8_t won;
-    uint8_t sound;
     uint8_t intro_step, intro_toggle, intro_frame;
-    uint8_t mask_id, image_id, board_id, think_id;
+    uint8_t image_id, board_id, think_id; /* the hand (its picture), the board, the phone thinking */
     uint8_t closed;
     uint8_t anim, counter;
     int8_t x, y, tx, ty;
-    uint8_t units[PITS], tens[PITS]; /* the digits' sprites */
+    uint8_t units[PITS], tens[PITS]; /* the digits' pictures */
+#ifdef BANTUMI_TREE
+    uint8_t first_turn; /* nothing sown yet: # hands the first move to the phone */
+    uint8_t resumed;    /* Continue: the board is not to come in again */
+#else
+    uint8_t sound;
+    uint8_t mask_id;    /* the hand's mask */
     /* The hands' bitmaps in RAM, open and closed, each with a height of
        its own: every sprite made from one shows what it holds now. */
     uint8_t open_mask[OPEN_W * 2], open_image[OPEN_W * 2];
     uint8_t closed_mask[CLOSED_W * 2], closed_image[CLOSED_W * 2];
+#endif
 
     /* The search: the nodes from the root down to the one being worked on. */
     struct node nodes[NODES];
 };
 
 /* A platform short of work RAM keeps the state elsewhere: the Game Boy
-   in cartridge RAM, with SDCC's __at (see core/pairs2.c). */
+   in cartridge RAM, with SDCC's __at. */
 #ifdef BANTUMI_STATE_AT
 static __at(BANTUMI_STATE_AT) struct bantumi b;
 #ifdef BANTUMI_STATE_END
@@ -125,7 +132,7 @@ static struct bantumi b;
 #endif
 
 /* The search's own state, outside the game's for the Game Boy's version
-   of it in assembly (platform/gb/search.s), which this layout is for: the
+   of it in assembly (common/bantumi/search.s), which this layout is for: the
    node being worked on, the root, the live board the phone's capture is
    tested on, the plies left, the best move at the root, and the steps a
    call takes and whether the search ended in them. */
@@ -141,6 +148,101 @@ typedef char node_layout[sizeof(struct node) == 24 && offsetof(struct node, alph
                          && offsetof(struct node, first) == 21 && offsetof(struct node, counter) == 22
                          && offsetof(struct node, empty) == 23 ? 1 : -1];
 #endif
+
+#ifdef BANTUMI_TREE
+
+/* Whether the pictures have changed since bantumi_render last drew them:
+   on most ticks the phone thinks, nothing moves. Every change to them
+   here goes through the graphics library under these names, which note
+   it. */
+static uint8_t changed;
+#define si_pic_reset() (changed = 1, (si_pic_reset)())
+#define si_pic_create(...) (changed = 1, (si_pic_create)(__VA_ARGS__))
+#define si_pic_create_masked(...) (changed = 1, (si_pic_create_masked)(__VA_ARGS__))
+#define si_pic_free(id) (changed = 1, (si_pic_free)(id))
+#define si_pic_move_after(id, after) (changed = 1, (si_pic_move_after)(id, after))
+#undef si_pic_set_mode
+#define si_pic_set_mode(id, m) (changed = 1, si_pics[id].mode = (m))
+#undef si_pic_move
+#define si_pic_move(id, px, py) (changed = 1, si_pics[id].x = (int16_t)(px), si_pics[id].y = (int16_t)(py))
+#undef si_pic_move_by
+#define si_pic_move_by(id, dx, dy) (changed = 1, si_pics[id].x = (int16_t)(si_pics[id].x + (dx)), \
+                                    si_pics[id].y = (int16_t)(si_pics[id].y + (dy)))
+
+uint8_t bantumi_sound, bantumi_level = 1, bantumi_beans = 4;
+uint16_t bantumi_period;
+/* Whether the winner's store digits show, and the ticks to their next
+   blink in the game-over pause: the game never sets them at the start, so
+   they go on from where the last game left them; after power-on 0 and 5
+   (read in MAME). */
+static uint8_t winner_shown, winner_ticks = 5;
+/* What the event asks of the framework: BANTUMI_DONE_ bits. */
+static uint8_t done;
+
+#define pit_x(pit) bantumi_pit_xy[pit]
+#define pit_y(pit) bantumi_pit_xy[PITS + (pit)]
+
+/* Frees a picture and forgets it. */
+static void drop(uint8_t *id)
+{
+    if (*id) {
+        si_pic_free(*id);
+        *id = 0;
+    }
+}
+#define free_pic(id) drop(&(id))
+#define set_frame(id, n) (changed = 1, si_pics[id].frame = (uint8_t)(n))
+
+/* The board first in the list, under everything; the hand and the phone
+   thinking last, over everything (0x2e8718). */
+static void restack(void)
+{
+    if (b.board_id)
+        si_pic_move_after(b.board_id, 0);
+    if (b.image_id && b.image_id != si_pics[0].prev)
+        si_pic_move_after(b.image_id, si_pics[0].prev);
+    if (b.think_id && b.think_id != si_pics[0].prev)
+        si_pic_move_after(b.think_id, si_pics[0].prev);
+}
+
+/* Sets a pit's count and its digits: one digit in the middle of the box,
+   or two, the tens made and freed as the count crosses ten. The player's
+   side's digits flip what is under them, the phone's are copied
+   (0x2e8830). */
+static void set_pit(uint8_t pit, int8_t n)
+{
+    uint8_t store = pit == STORE || pit == PHONE_STORE;
+    uint8_t dx = store ? 3 : 1, dy = store ? 5 : 2;
+
+    if (n < 10 && b.pits[pit] >= 10) {
+        drop(&b.tens[pit]);
+        si_pic_move(b.units[pit], pit_x(pit) + dx + 3, pit_y(pit) + dy);
+    } else if (n >= 10 && b.pits[pit] < 10) {
+        b.tens[pit] = si_pic_create(pit < 7 ? SI_MODE_COPY_XOR : SI_MODE_COPY, pit_x(pit) + dx, pit_y(pit) + dy,
+                                    bantumi_digits, 10);
+        set_frame(b.tens[pit], n / 10);
+        si_pic_move(b.units[pit], pit_x(pit) + dx + 4, pit_y(pit) + dy);
+        restack();
+    } else if (n >= 10) {
+        set_frame(b.tens[pit], n / 10);
+    }
+    set_frame(b.units[pit], n % 10);
+    b.pits[pit] = n;
+}
+
+/* The hand: one picture through a mask, open or closed, below the pits
+   or above them, which takes the place of the phone thinking
+   (0x2e879c). Kept, the hand before stays on the screen too. */
+static void draw_hand(uint8_t keep)
+{
+    if (!keep)
+        drop(&b.image_id);
+    drop(&b.think_id);
+    b.image_id = si_pic_create_masked(SI_MODE_COPY, b.x, b.y, &bantumi_hands[(b.closed ? 2 : 0) + (b.hand_pit > 6)]);
+    restack();
+}
+
+#else
 
 /* How the winner's store digits are drawn, flipped on every tick of the
    game-over pause. The game never sets it at the start, so it goes on
@@ -288,6 +390,10 @@ static void draw_hand(uint8_t keep)
     b.image_id = (uint8_t)sprite_create(&im, SPRITE_MODE_SET, 3, b.x, b.y < 0 ? 0 : b.y);
 }
 
+#define free_pic(id) free_id(id)
+
+#endif
+
 /* The open hand over a pit of the player's row. */
 static void hand_at(uint8_t pit)
 {
@@ -312,6 +418,13 @@ static void hand_path(uint8_t from, uint8_t to)
         b.y = (int8_t)(pit_y(from) + 10);
         b.ty = (int8_t)(pit_y(to) + (picking ? 0 : b.hand_pit == PHONE_STORE ? 10 : 7));
     }
+#ifdef BANTUMI_TREE
+    /* The 3410's stores are taller: the hand goes into the box. */
+    if (to == STORE || to == PHONE_STORE) {
+        b.tx = (int8_t)pit_x(to);
+        b.ty = (int8_t)(from < 6 ? pit_y(to) - 4 : pit_y(to) + 7);
+    }
+#endif
     if (from == PHONE_STORE || (from == 12 && b.turn == TURN_PLAYER)) {
         b.x = (int8_t)pit_x(PHONE_STORE);
         b.y = (int8_t)pit_y(PHONE_STORE);
@@ -572,15 +685,49 @@ static void ai_step(void)
     }
 }
 
-/* The board, and on the open board the hand (or the phone thinking) and
-   the digits. All sprites are made afresh. */
 static void think_create(void)
 {
     b.think_ticks = 2;
     b.think_frame = 0;
+#ifdef BANTUMI_TREE
+    b.think_id = si_pic_create(SI_MODE_COPY, THINK_X, THINK_Y, bantumi_think, 8);
+    restack();
+#else
     b.think_id = create(THINKING, SPRITE_MODE_OPAQUE, 2, THINK_X, THINK_Y);
+#endif
 }
 
+#ifdef BANTUMI_TREE
+/* The board in one of its frames, made if it is not there: the open
+   board, and the box closing. On the open board the hand and the digits
+   are made afresh (0x2e899e). */
+static void draw_board(uint8_t frame)
+{
+    uint8_t i;
+
+    if (!b.board_id)
+        b.board_id = si_pic_create(SI_MODE_COPY, 0x30 - 8 * b.intro_step, 0, bantumi_boards, 4);
+    set_frame(b.board_id, frame);
+    if (frame == 0) {
+        b.closed = 0;
+        hand_at(b.cursor);
+        draw_hand(1);
+        for (i = 0; i < PITS; i++) {
+            uint8_t store = i == STORE || i == PHONE_STORE;
+            int8_t n = b.pits[i];
+
+            b.pits[i] = 0;
+            b.units[i] = si_pic_create(i < 7 ? SI_MODE_COPY_XOR : SI_MODE_COPY, pit_x(i) + (store ? 6 : 4),
+                                       pit_y(i) + (store ? 5 : 2), bantumi_digits, 10);
+            set_pit(i, n);
+        }
+        si_pic_move_after(b.board_id, 0);
+    }
+    restack();
+}
+#else
+/* The board, and on the open board the hand (or the phone thinking) and
+   the digits. All sprites are made afresh. */
 static void draw_board(uint8_t frame)
 {
     uint8_t i;
@@ -608,6 +755,7 @@ static void draw_board(uint8_t frame)
         set_pit(i, n);
     }
 }
+#endif
 
 /* The hand takes a pit's beans and sets out for the next pit. */
 static void pick(uint8_t pit)
@@ -615,10 +763,12 @@ static void pick(uint8_t pit)
     b.sow_pit = (uint8_t)(pit + 1);
     hand_path(pit, (uint8_t)(pit + 1));
     if (b.turn == TURN_PHONE) {
-        free_id(b.think_id);
+        free_pic(b.think_id);
     } else if (b.turn == TURN_PLAYER) {
+#ifndef BANTUMI_TREE
         free_id(b.mask_id);
-        free_id(b.image_id);
+#endif
+        free_pic(b.image_id);
     }
     b.closed = 1;
     draw_hand(1);
@@ -634,8 +784,10 @@ static void turn_end(uint8_t pass)
     uint8_t i;
 
     b.anim = HAND_IDLE;
+#ifndef BANTUMI_TREE
     free_id(b.mask_id);
-    free_id(b.image_id);
+#endif
+    free_pic(b.image_id);
     if (pass)
         b.turn = b.turn == TURN_PHONE ? TURN_PLAYER : TURN_PHONE;
     if (!row_empty((const uint8_t *)b.pits)) {
@@ -657,6 +809,20 @@ static void turn_end(uint8_t pass)
         set_pit(STORE, (int8_t)(b.pits[STORE] + b.pits[i]));
         set_pit(i, 0);
     }
+#ifdef BANTUMI_TREE
+    /* The winner's store: the player's shown (and to blink), the phone's
+       set blinking. */
+    if (b.pits[STORE] > b.pits[PHONE_STORE]) {
+        b.won = 1;
+        si_pic_set_mode(b.units[STORE], SI_MODE_COPY_XOR);
+        if (b.pits[STORE] >= 10)
+            si_pic_set_mode(b.tens[STORE], SI_MODE_COPY_XOR);
+    } else if (b.pits[STORE] < b.pits[PHONE_STORE]) {
+        si_pic_set_mode(b.units[PHONE_STORE], si_pics[b.units[PHONE_STORE]].mode | 4);
+        if (b.pits[PHONE_STORE] >= 10)
+            si_pic_set_mode(b.tens[PHONE_STORE], si_pics[b.tens[PHONE_STORE]].mode | 4);
+    }
+#else
     if (b.pits[STORE] > b.pits[PHONE_STORE]) {
         b.won = 1;
     } else if (b.pits[STORE] < b.pits[PHONE_STORE]) {
@@ -664,21 +830,29 @@ static void turn_end(uint8_t pass)
         if (b.pits[PHONE_STORE] >= 10)
             sprite_set_mode(b.tens[PHONE_STORE], SPRITE_MODE_OPAQUE_BLINK);
     }
+#endif
     b.turn = TURN_OVER_PAUSE;
 }
 
-/* The thinking picture's next frame every other tick. */
-static int think_tick(void)
+/* The thinking picture's next frame every other tick; whether it
+   changed. */
+static uint8_t think_tick(void)
 {
+#ifndef BANTUMI_TREE
     struct sprite_image im;
+#endif
 
     if (--b.think_ticks)
-        return GAME_RESULT_NONE;
+        return 0;
     b.think_ticks = 2;
     b.think_frame = (uint8_t)((b.think_frame + 1) & 7);
+#ifdef BANTUMI_TREE
+    set_frame(b.think_id, b.think_frame);
+#else
     image(&im, THINKING + 12ul * b.think_frame);
     sprite_set_image(b.think_id, &im);
-    return GAME_RESULT_REDRAW;
+#endif
+    return 1;
 }
 
 /* One bean from the hand, or the end of a capture. */
@@ -705,7 +879,11 @@ static void act(void)
         return;
     set_pit(b.sow_pit, (int8_t)(b.pits[b.sow_pit] + 1));
     b.in_hand--;
+#ifdef BANTUMI_TREE
+    bantumi_sound = BANTUMI_SOUND_BEAN;
+#else
     b.sound = 1;
+#endif
     if (b.in_hand == 0) {
         uint8_t p = b.sow_pit;
 
@@ -748,9 +926,10 @@ static int8_t toward(int8_t at, int8_t to)
     return to;
 }
 
-static int tick(struct game_context *ctx)
+/* The hand's animation, a tick of it; whether the picture changed. */
+static uint8_t hand_tick(void)
 {
-    int result = GAME_RESULT_NONE;
+    uint8_t changed = 0;
 
     switch (b.anim) {
     case HAND_MOVE:
@@ -760,35 +939,45 @@ static int tick(struct game_context *ctx)
             b.anim = HAND_ARRIVE;
         b.counter = 2;
         draw_hand(0);
-        result = GAME_RESULT_REDRAW;
-        break;
+        return 1;
     case HAND_WAIT:
         if (--b.counter == 0) {
             draw_hand(0);
             b.anim = HAND_MOVE;
-            result = GAME_RESULT_REDRAW;
+            return 1;
         }
-        break;
+        return 0;
     case HAND_ARRIVE:
         if (b.counter == 2) {
             b.closed = b.turn == TURN_PLAYER_HAND || b.turn == TURN_PHONE_HAND;
+#ifdef BANTUMI_TREE
+            /* Above the pits the open hand stops short, then drops in. */
+            if (!b.closed && b.hand_pit > 6)
+                b.y = (int8_t)(b.ty - 3);
+#endif
             draw_hand(0);
-            result = GAME_RESULT_REDRAW;
+            changed = 1;
         }
         if (--b.counter != 0)
-            break;
+            return changed;
         if (b.turn != TURN_PLAYER_HAND && b.turn != TURN_PHONE_HAND) {
             b.closed = 1;
+#ifdef BANTUMI_TREE
+            if (b.hand_pit > 6)
+                b.y = b.ty;
+#endif
             draw_hand(0);
             b.anim = HAND_ACT;
-            result = GAME_RESULT_REDRAW;
+            return 1;
         } else if (b.sow == SOW_CAPTURE_LAST || b.sow == SOW_CAPTURE) {
             hand_path(b.hand_pit, b.capture_store);
             set_pit(b.hand_pit, 0);
             b.turn = b.turn == TURN_PLAYER_HAND ? TURN_PLAYER : TURN_PHONE;
         } else {
+#ifndef BANTUMI_TREE
             free_id(b.mask_id);
-            free_id(b.image_id);
+#endif
+            free_pic(b.image_id);
             if (b.turn == TURN_PLAYER_HAND) {
                 b.turn = TURN_PLAYER;
                 b.hand_pit = b.cursor;
@@ -798,22 +987,39 @@ static int tick(struct game_context *ctx)
             }
             pick(b.hand_pit);
         }
-        break;
+        return changed;
     case HAND_ACT:
         act();
-        result = GAME_RESULT_REDRAW;
+        return 1;
+    }
+    return 0;
+}
+
+#ifndef BANTUMI_TREE
+
+static int tick(struct game_context *ctx)
+{
+    int result = GAME_RESULT_NONE;
+
+    switch (b.anim) {
+    case HAND_MOVE:
+    case HAND_WAIT:
+    case HAND_ARRIVE:
+    case HAND_ACT:
+        if (hand_tick())
+            result = GAME_RESULT_REDRAW;
         break;
     default:
         switch (b.turn) {
         case TURN_PHONE:
             b.hand_pit = NO_PIT;
-            result = think_tick();
+            result = think_tick() ? GAME_RESULT_REDRAW : GAME_RESULT_NONE;
             ai_step();
             if (b.sow == SOW_BEAN)
                 result = GAME_RESULT_REDRAW;
             break;
         case TURN_HINT:
-            result = think_tick();
+            result = think_tick() ? GAME_RESULT_REDRAW : GAME_RESULT_NONE;
             ai_step();
             if (b.turn == TURN_PLAYER) {
                 free_id(b.think_id);
@@ -982,3 +1188,440 @@ void bantumi_render(void)
     sprite_changed = 0;
     sprite_render();
 }
+
+#else
+
+/* The 3410. */
+
+/* The title (0x3eb790, 0x3eb6d4): the background, and one small picture
+   moved and changed a step at a time. */
+static uint8_t title_step, title_pic;
+
+static void title_start(void)
+{
+    si_pic_reset();
+    title_step = 0;
+    si_pic_create(SI_MODE_COPY, 6, 8, bantumi_title_background, 1);
+    title_pic = si_pic_create(SI_MODE_COPY, bantumi_title_at[0][0], bantumi_title_at[0][1], bantumi_title_pictures, 6);
+    bantumi_period = 300;
+}
+
+static void title_tick(void)
+{
+    if (++title_step >= 7) {
+        si_pic_reset();
+        done |= BANTUMI_DONE_CLOSE;
+        return;
+    }
+    si_pic_move(title_pic, bantumi_title_at[title_step][0], bantumi_title_at[title_step][1]);
+    set_frame(title_pic, title_step - 1);
+    if (title_step == 3)
+        bantumi_period = 200;
+    else if (title_step == 4)
+        bantumi_period = 300;
+}
+
+/* The digits' pictures, all freed (0x2e9092). */
+static void drop_digits(void)
+{
+    uint8_t i;
+
+    for (i = 0; i < PITS; i++) {
+        drop(&b.units[i]);
+        drop(&b.tens[i]);
+    }
+}
+
+/* The phone thinking for the player, on the first level (0x2e8d54). */
+static void hint(void)
+{
+    b.turn = TURN_HINT;
+    think_create();
+    ai_start();
+    drop(&b.image_id);
+}
+
+/* The game's tick (0x2e9340). The phone draws the picture again after
+   every event, whether the game asks for it or not. */
+static void tick(void)
+{
+    if (b.anim != HAND_IDLE) {
+        hand_tick();
+        return;
+    }
+    switch (b.turn) {
+    case TURN_PHONE:
+        think_tick();
+        ai_step();
+        break;
+    case TURN_HINT:
+        think_tick();
+        ai_step();
+        if (b.turn == TURN_PLAYER) {
+            drop(&b.think_id);
+            b.closed = 0;
+            hand_at(b.cursor);
+            b.hand_pit = b.cursor;
+            draw_hand(1);
+        }
+        break;
+    case TURN_OVER_PAUSE:
+        if (--b.countdown == 0) {
+            b.turn = TURN_OVER;
+            drop_digits();
+        }
+        /* The player's store blinks, every sixth tick. */
+        if (b.pits[PHONE_STORE] < b.pits[STORE]) {
+            bantumi_sound = BANTUMI_SOUND_WON;
+            if (winner_ticks-- == 0) {
+                uint8_t mode = winner_shown ? SI_MODE_NONE : SI_MODE_COPY_XOR;
+
+                if (b.units[STORE])
+                    si_pic_set_mode(b.units[STORE], mode);
+                if (b.pits[STORE] >= 10 && b.tens[STORE])
+                    si_pic_set_mode(b.tens[STORE], mode);
+                winner_shown = !winner_shown;
+                winner_ticks = 5;
+            }
+        } else {
+            bantumi_sound = BANTUMI_SOUND_LOST;
+        }
+        break;
+    case TURN_INTRO:
+        /* The closed box slides in from the right, then opens. */
+        if (b.intro_step < 6) {
+            si_pic_move(b.board_id, 0x28 - 8 * b.intro_step, 0);
+            b.intro_step++;
+        } else if (b.intro_frame == 0) {
+            b.turn = TURN_PLAYER;
+        } else if (b.intro_toggle == 1) {
+            b.intro_frame--;
+            draw_board(b.intro_frame);
+            b.intro_toggle = 0;
+        } else {
+            b.intro_toggle = 1;
+        }
+        break;
+    case TURN_OVER:
+        /* The box closes, then slides out to the right. */
+        if (b.intro_frame >= 8) {
+            done |= BANTUMI_DONE_CLOSE;
+            break;
+        }
+        if (b.intro_toggle == 1 && b.intro_frame < 3) {
+            b.intro_frame++;
+            draw_board(b.intro_frame);
+        } else if (b.intro_frame > 2) {
+            if (b.intro_toggle == 1)
+                b.intro_frame++;
+            si_pic_move_by(b.board_id, 8, 0);
+        }
+        b.intro_toggle = b.intro_toggle != 1;
+        break;
+    default:
+        break;
+    }
+}
+
+/* A key going down, on the player's turn. */
+static void key(uint8_t code)
+{
+    if (b.turn != TURN_PLAYER)
+        return;
+    switch (code) {
+    case 0:
+    case 5:
+        if (b.pits[b.cursor] <= 0 || b.anim != HAND_IDLE)
+            return;
+        b.turn = TURN_PLAYER_HAND;
+        bantumi_period = 100;
+        b.hand_pit = b.cursor;
+        hand_path(b.cursor, b.cursor);
+        b.first_turn = 0;
+        return;
+    case 4:
+    case 6:
+        if (b.anim != HAND_IDLE || (code == 4 ? b.cursor == 0 : b.cursor >= 5))
+            return;
+        b.cursor = (uint8_t)(code == 4 ? b.cursor - 1 : b.cursor + 1);
+        /* Only the picture moves. */
+        if (b.image_id)
+            si_pic_move(b.image_id, pit_x(b.cursor) - 1, pit_y(b.cursor) - 14);
+        return;
+    case BANTUMI_KEY_STAR:
+        if (b.anim == HAND_IDLE && b.level == 1) {
+            hint();
+        }
+        return;
+    case BANTUMI_KEY_HASH:
+        if (b.first_turn) {
+            turn_end(1);
+            b.first_turn = 0;
+        }
+        return;
+    }
+}
+
+/* New game (0x2e8efc): every picture freed, the pits filled. */
+static void new_game(void)
+{
+    uint8_t i;
+
+    si_pic_reset();
+    memset(&b, 0, sizeof b);
+    b.countdown = 40;
+    b.level = bantumi_level;
+    b.first_turn = 1;
+    for (i = 0; i < PITS; i++)
+        b.pits[i] = (int8_t)(i == STORE || i == PHONE_STORE ? 0 : bantumi_beans);
+    b.intro_frame = 3;
+    bantumi_period = 100;
+}
+
+/* The game as Menu left it, for Continue, which comes after a New game:
+   all but the search, which starts again. */
+#define SAVED_SIZE offsetof(struct bantumi, nodes)
+#ifdef BANTUMI_SAVED_AT
+static __at(BANTUMI_SAVED_AT) uint8_t saved[SAVED_SIZE];
+#ifdef BANTUMI_SAVED_END
+typedef char bantumi_saved_fits[BANTUMI_SAVED_AT + SAVED_SIZE <= BANTUMI_SAVED_END ? 1 : -1];
+#endif
+#else
+static uint8_t saved[SAVED_SIZE];
+#endif
+
+/* Menu: the game's pictures freed, the game kept for Continue
+   (0x2e9118). */
+static void pause(void)
+{
+    memcpy(saved, &b, SAVED_SIZE);
+    drop(&b.board_id);
+    drop(&b.image_id);
+    drop(&b.think_id);
+    drop_digits();
+}
+
+/* Continue (0x2e8dc4): the board made afresh where the game was. */
+static void resume(void)
+{
+    memcpy(&b, saved, SAVED_SIZE);
+    b.resumed = 1;
+    drop(&b.board_id);
+    draw_board(b.intro_frame);
+    if (b.intro_step < 6)
+        si_pic_move(b.board_id, 0x28 - 8 * b.intro_step, 0);
+    /* The hand as it was, which the open board put over the cursor. */
+    {
+        const struct bantumi *was = (const struct bantumi *)saved;
+
+        b.anim = was->anim;
+        b.counter = was->counter;
+        b.x = was->x;
+        b.y = was->y;
+        b.tx = was->tx;
+        b.ty = was->ty;
+        b.closed = was->closed;
+    }
+    if (b.intro_frame == 0) {
+        if (b.turn == TURN_OVER_PAUSE)
+            drop(&b.image_id);
+        else
+            draw_hand(0);
+    }
+    if (b.turn == TURN_PLAYER && b.anim == HAND_IDLE && b.image_id)
+        si_pic_move(b.image_id, pit_x(b.cursor) - 1, pit_y(b.cursor) - 14);
+    if (b.turn == TURN_PHONE && b.anim == HAND_IDLE)
+        turn_end(0);
+    if (b.turn == TURN_HINT)
+        hint();
+    bantumi_period = 100;
+}
+
+/* The Instructions' demos (0x2e8fbc, 0x2e9a10): a game set up and
+   played by a script of keys, a step a tick, until the phone's turn. */
+static uint8_t demo, demo_arrow;
+static uint8_t demo_step;
+
+static void demo_start(uint8_t which)
+{
+    uint8_t i;
+
+    bantumi_beans = 4;
+    new_game();
+    b.intro_step = 6;
+    b.turn = TURN_PLAYER;
+    demo = which;
+    if (which == BANTUMI_DEMO_SKIP) {
+        for (i = 0; i < PHONE_STORE; i++)
+            b.pits[i] = 2;
+        b.pits[2] = 12;
+        b.pits[STORE] = 7;
+        b.pits[PHONE_STORE] = 7;
+    } else if (which == BANTUMI_DEMO_CAPTURE) {
+        for (i = 0; i < PHONE_STORE; i++)
+            b.pits[i] = 0;
+        b.pits[1] = 1;
+        b.pits[2] = 2;
+        b.pits[STORE] = 20;
+        b.pits[7] = 2;
+        b.pits[8] = 3;
+        b.pits[PHONE_STORE] = 20;
+    }
+    demo_step = 0;
+    draw_board(0);
+}
+
+/* The second demo's arrow, over the keypad's key. */
+static void demo_point(uint8_t x)
+{
+    drop(&demo_arrow);
+    if (x)
+        demo_arrow = si_pic_create(SI_MODE_COPY, x, 7, bantumi_arrow, 1);
+}
+
+static void demo_tick(void)
+{
+    if (demo == BANTUMI_DEMO_SOW) {
+        if (demo_step == 0) {
+            tick();
+            if (b.turn == TURN_PLAYER)
+                demo_step = 1;
+        } else if (demo_step == 1) {
+            key(5);
+            demo_step = 2;
+        } else {
+            tick();
+        }
+    } else if (demo == BANTUMI_DEMO_KEYS) {
+        switch (++demo_step) {
+        case 1:
+            /* Never freed: the closing frees it. */
+            si_pic_create(SI_MODE_COPY, 0x3c, 0, bantumi_keypad, 1);
+            break;
+        case 5:
+            demo_point(0x4a);
+            break;
+        case 7:
+            key(6);
+            break;
+        case 0x13:
+            demo_point(0x3e);
+            break;
+        case 0x15:
+            key(4);
+            break;
+        case 0x21:
+            demo_point(0x44);
+            break;
+        case 0x23:
+            key(5);
+            break;
+        case 0x2f:
+            demo_point(0);
+            break;
+        default:
+            tick();
+            break;
+        }
+    } else {
+        switch (demo_step) {
+        case 7:
+        case 0x14:
+            key(6);
+            break;
+        case 0x1e:
+        case 0x50:
+            key(5);
+            break;
+        case 0x46:
+            key(4);
+            break;
+        default:
+            tick();
+            break;
+        }
+        demo_step++;
+    }
+    /* Over when the phone's turn comes. */
+    if (b.turn == TURN_PHONE) {
+        demo = 0;
+        done |= BANTUMI_DONE_CLOSE;
+    }
+}
+
+/* What is under way: the title, the game, a demo. */
+enum {
+    PLAYING_NONE,
+    PLAYING_TITLE,
+    PLAYING_GAME,
+    PLAYING_DEMO
+};
+static uint8_t playing;
+
+uint8_t bantumi_event(uint8_t event, uint8_t a) BANTUMI_FAR
+{
+    done = 0;
+    switch (event) {
+    case BANTUMI_EVENT_TICK:
+        if (playing == PLAYING_TITLE)
+            title_tick();
+        else if (playing == PLAYING_GAME)
+            tick();
+        else if (playing == PLAYING_DEMO)
+            demo_tick();
+        break;
+    case BANTUMI_EVENT_KEY_DOWN:
+        if (playing == PLAYING_GAME)
+            key(a);
+        else if (playing == PLAYING_DEMO)
+            /* The phone's handler takes a key in a demo for a tick. */
+            demo_tick();
+        break;
+    case BANTUMI_EVENT_PAUSE:
+        if (playing == PLAYING_TITLE) {
+            si_pic_reset();
+            done |= BANTUMI_DONE_CLOSE;
+        } else if (playing == PLAYING_GAME) {
+            pause();
+        } else if (playing == PLAYING_DEMO) {
+            demo = 0;
+            done |= BANTUMI_DONE_CLOSE;
+        }
+        break;
+    case BANTUMI_EVENT_DEMO:
+        playing = PLAYING_DEMO;
+        demo_start(a);
+        break;
+    case BANTUMI_EVENT_NEW_GAME:
+        playing = PLAYING_GAME;
+        new_game();
+        break;
+    case BANTUMI_EVENT_START:
+        if (!b.resumed)
+            draw_board(b.intro_frame);
+        bantumi_period = 100;
+        break;
+    case BANTUMI_EVENT_CONTINUE:
+        playing = PLAYING_GAME;
+        resume();
+        break;
+    case BANTUMI_EVENT_TITLE:
+        playing = PLAYING_TITLE;
+        title_start();
+        break;
+    }
+    if (done & BANTUMI_DONE_CLOSE)
+        playing = PLAYING_NONE;
+    return done;
+}
+
+void bantumi_render(uint8_t all) BANTUMI_FAR
+{
+    /* On most ticks the phone thinks nothing moves: the picture stays. */
+    if (!all && !changed)
+        return;
+    changed = 0;
+    si_pic_render();
+}
+
+#endif

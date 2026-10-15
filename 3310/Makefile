@@ -374,6 +374,12 @@ $(BUILD)/gb/1/start_keys.rel $(BUILD)/gb/1/start_keys-keys.rel: platform/gb/star
 	@mkdir -p $(BUILD)/gb/1
 	$(SDCC) $(GB_CFLAGS) '-DSTART_KEYS="$(if $(findstring keys,$@),$(KEYS))"' --codeseg CODE_1 --constseg CODE_1 -c $< -o $@
 
+# Bantumi's search, in its bank.
+$(BUILD)/gb/search.rel: $(COMMON)/bantumi/search.s
+	@mkdir -p $(BUILD)/gb
+	sed 's/_CODE_BANTUMI/_CODE_6/' $< > $(BUILD)/gb/search.s
+	$(SDAS) -o $@ $(BUILD)/gb/search.s
+
 $(BUILD)/gb/%.rel: platform/gb/%.s
 	@mkdir -p $(BUILD)/gb
 	$(SDAS) -o $@ $<
