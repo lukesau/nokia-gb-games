@@ -10,7 +10,7 @@ this repository.
 |---|---|---|---|
 | [Nokia 3210](3210/README.md) | Snake, Memory, Rotation | yes | yes |
 | [Nokia 3310](3310/README.md) | Snake II, Space Impact, Bantumi, Pairs II | yes | yes |
-| [Nokia 3410](3410/README.md) | Snake II so far; Space Impact is being mapped | yes | not yet |
+| [Nokia 3410](3410/README.md) | Snake II, Space Impact, Bantumi | yes | not yet |
 
 ![The 3210's first screen, list of games, and Rotation, Snake and Memory being played](3210/docs/banner.png)
 
@@ -43,6 +43,8 @@ The 3310 and 3410 followed the same way.
 
 - `3210/`, `3310/`, `3410/`: one port per phone, each a project of its own
   with its Makefile, core, platform layers, tools and README.
+- `common/bantumi/`: Bantumi, which the 3310 and the 3410 build from the
+  same code, each with its own `core/bantumi_phone.h`.
 - `common/`: the code the ports share: the LCD buffer and its blits, the
   font, the test card, the version, the full-screen menus made at build
   time and what shows them on the Game Boy and the GBA, the GBA linker

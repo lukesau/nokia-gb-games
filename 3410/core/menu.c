@@ -1,5 +1,7 @@
 #include "menu.h"
+#include "menu_header.h"
 
+#include "bantumi_play.h"
 #include "font.h"
 #include "native_tiles.h"
 #include "game.h"
@@ -20,7 +22,6 @@
 /* The phone's menu pages: a header line with the page's title in the
    middle and the entry's number on the right, three rows of the large
    font, a scrollbar on the right and two soft keys along the bottom. */
-#define HEADER_LINE_Y 3
 #define LIST_Y 9
 #define ROW_HEIGHT 15
 #define ROW_TEXT_X 1
@@ -66,7 +67,17 @@ enum {
     SCREEN_SI_CHAPTERS,
     SCREEN_SI_HELP,
     SCREEN_SI_DEMO,
-    SCREEN_SI_DONE
+    SCREEN_SI_DONE,
+    /* Bantumi's: its title, its menu, the game, its Game options with the
+       beans and the level, and its Instructions with their demos. */
+    SCREEN_BT_TITLE,
+    SCREEN_BT_MENU,
+    SCREEN_BT_PLAY,
+    SCREEN_BT_OPTIONS,
+    SCREEN_BT_BEANS,
+    SCREEN_BT_LEVEL,
+    SCREEN_BT_HELP,
+    SCREEN_BT_DEMO
 };
 
 /* Space Impact's menu. Continue is there only while a game is paused. */
@@ -80,6 +91,16 @@ enum {
 #define SI_HELP_TEXTS 4
 #define SI_HELP_PAGES 8
 #define SI_HELP_LINES 4
+
+/* Bantumi's menu. Continue is there only while a game is paused. */
+enum {
+    BT_ITEM_CONTINUE,
+    BT_ITEM_NEW_GAME,
+    BT_ITEM_OPTIONS,
+    BT_ITEM_INSTRUCTIONS
+};
+/* Five texts, each followed by its demo. */
+#define BT_HELP_TEXTS 5
 
 /* The games' settings, in the phone's order. The last is the phone's Club
    Nokia score ID, which has no ID and does nothing here. */
@@ -183,6 +204,11 @@ static uint8_t si_done_frames;
 static uint16_t si_units;  /* phone timer units to the game's next tick; 0 none */
 static uint16_t si_us;     /* time not yet turned into units */
 static uint8_t si_held;    /* the buttons held in the game, MENU_KEY_ bits */
+/* Bantumi's menu and game; its Instructions page through Space Impact's
+   si_help_ variables. */
+static uint8_t bt_item, bt_item_top, bt_paused, bt_option, bt_beans, bt_level, bt_help;
+static uint8_t bt_demo_waiting; /* as si_demo_waiting */
+static struct game_settings bt_settings;
 
 /* The phone's LCD; the full-screen variant's own menus; its board. */
 enum {
@@ -379,6 +405,21 @@ static const char *option_name(uint8_t index)
     return index == OPTION_MAZES ? text_mazes : text_level;
 }
 
+/* The Instructions' texts may be kept in another bank (the Game Boy's,
+   far.c): the one shown is copied out first. */
+#ifdef MENU_TEXT_FAR
+void far_text_copy(char *to, const char *from, uint8_t size);
+static char help_copy[TEXT_HELP_MAX];
+
+static const char *help_load(const char *text)
+{
+    far_text_copy(help_copy, text, sizeof help_copy);
+    return help_copy;
+}
+#else
+#define help_load(text) (text)
+#endif
+
 static const char *help_text(uint8_t page)
 {
     switch (page) {
@@ -393,27 +434,8 @@ static const char *help_text(uint8_t page)
     }
 }
 
-/* A page's header: the title in the tiny font in the middle of a line
-   across, and the entry's number on the right. The phone centres the
-   title in the 93 columns left of the number, its width counting the
-   space after its last letter. */
-#define HEADER_CENTRE_WIDTH 93
-static void draw_header(const char *title, uint8_t number)
-{
-    char digits[3];
-    uint8_t n = 0, width = (uint8_t)font_text_width(&font_tiny_plain, title);
-    uint8_t x = (uint8_t)((HEADER_CENTRE_WIDTH - width) / 2), number_x;
-
-    if (number >= 10)
-        digits[n++] = (char)('0' + number / 10);
-    digits[n++] = (char)('0' + number % 10);
-    digits[n] = 0;
-    number_x = (uint8_t)(LCD_WIDTH - font_text_width(&font_tiny_plain, digits));
-    lcd_fill_rect(0, HEADER_LINE_Y, x - 2, 1, 1);
-    font_draw(&font_tiny_plain, x, 0, title, 1);
-    lcd_fill_rect(x + width, HEADER_LINE_Y, number_x - 2 - x - width, 1, 1);
-    font_draw(&font_tiny_plain, number_x, 0, digits, 1);
-}
+/* A page's header: menu_header.h. */
+#define draw_header menu_header_draw
 
 static void draw_scrollbar(uint8_t index, uint8_t count)
 {
@@ -484,16 +506,17 @@ static void draw_main(void)
     draw_softkeys(text_select, text_exit);
 }
 
-static void draw_level(void)
+/* `count` bars, those up to `chosen` filled. */
+static void draw_level(uint8_t count, uint8_t chosen)
 {
     uint8_t i, x, top;
 
     font_draw(&font_medium_bold, LEVEL_TEXT_X, 0, text_level, 1);
-    for (i = 0; i < SNAKE2_LEVELS; i++) {
+    for (i = 0; i < count; i++) {
         x = (uint8_t)(LEVEL_BAR_X + i * LEVEL_BAR_PITCH);
         /* The first bar's line is a row taller than the rule gives. */
         top = i ? (uint8_t)(LEVEL_BAR_BOTTOM - 1 - 3 * i) : LEVEL_BAR_BOTTOM - 2;
-        if (i <= level)
+        if (i <= chosen)
             lcd_fill_rect(x, top - 1, LEVEL_BAR_WIDTH, LEVEL_BAR_BOTTOM + 1 - top, 1);
         lcd_fill_rect(x + LEVEL_BAR_WIDTH + 1, top, 1, LEVEL_BAR_BOTTOM + 1 - top, 1);
         lcd_fill_rect(x + 1, LEVEL_BAR_BOTTOM + 1, LEVEL_BAR_WIDTH + 1, 1, 1);
@@ -852,7 +875,7 @@ static void si_help_open(uint8_t which)
     screen = SCREEN_SI_HELP;
     si_help = which;
     si_help_pageno = 0;
-    si_help_page = si_help_pages[0] = si_help_text(which);
+    si_help_page = si_help_pages[0] = help_load(si_help_text(which));
 }
 
 static void si_menu_open(void)
@@ -1088,6 +1111,178 @@ static void short_list_move(uint8_t key, uint8_t count, uint8_t *selection)
     list_move(key, count, selection, &top);
 }
 
+/* Bantumi, driven by bantumi_play.h. Left and right move the hand, A
+   sows, B asks for a hint and Up hands the first move to the phone, as 4,
+   6, 5, * and # do on the phone; Start and Select pause. */
+static uint8_t bt_item_count(void)
+{
+    return (uint8_t)(3 + bt_paused);
+}
+
+static uint8_t bt_item_id(uint8_t index)
+{
+    return bt_paused ? index : (uint8_t)(index + 1);
+}
+
+static const char *bt_item_name(uint8_t index)
+{
+    switch (bt_item_id(index)) {
+    case BT_ITEM_CONTINUE:
+        return text_continue;
+    case BT_ITEM_NEW_GAME:
+        return text_new_game;
+    case BT_ITEM_OPTIONS:
+        return text_options;
+    default:
+        return text_instructions;
+    }
+}
+
+static const char *bt_option_name(uint8_t index)
+{
+    return index ? text_level : text_no_of_beans;
+}
+
+static const char *bt_beans_name(uint8_t index)
+{
+    return index == 0 ? text_beans_3 : index == 1 ? text_beans_4 : text_beans_5;
+}
+
+/* The beans a pit starts with: the record keeps 3 to 5 less 2, 0 for none
+   chosen yet. */
+static uint8_t bt_beans_count(void)
+{
+    return bt_settings.option ? (uint8_t)(bt_settings.option + 2) : 4;
+}
+
+static const char *bt_help_text(uint8_t which)
+{
+    static const char *const texts[BT_HELP_TEXTS] = {
+        text_help_bantumi_1, text_help_bantumi_2, text_help_bantumi_3, text_help_bantumi_4, text_help_bantumi_5
+    };
+
+    return texts[which];
+}
+
+static void bt_menu_open(void)
+{
+    screen = SCREEN_BT_MENU;
+    bt_item = bt_item_top = 0;
+}
+
+static void bt_help_open(uint8_t which)
+{
+    screen = SCREEN_BT_HELP;
+    bt_help = which;
+    si_help_pageno = 0;
+    si_help_page = si_help_pages[0] = help_load(bt_help_text(which));
+}
+
+/* After a demo: the next text, after the last the first again (seen in
+   MAME). */
+static void bt_help_next(void)
+{
+    bt_help_open(bt_help < BT_HELP_TEXTS - 1 ? (uint8_t)(bt_help + 1) : 0);
+}
+
+/* The game asked to be closed: its title ended, a game ended, or a demo
+   reached the phone's turn. */
+static void bt_closed(void)
+{
+    board_drawn = 0;
+    if (screen == SCREEN_BT_DEMO) {
+        bt_help_next();
+        return;
+    }
+    if (screen == SCREEN_BT_PLAY)
+        bt_paused = 0;
+    bt_menu_open();
+}
+
+static uint8_t bt_done(uint8_t done)
+{
+    if (done & BANTUMI_PLAY_CLOSED)
+        bt_closed();
+    return 1;
+}
+
+/* Starts something the game draws, with its timer. */
+static void bt_open(uint8_t which, uint8_t event, uint8_t a)
+{
+    screen = which;
+    board_drawn = 0;
+    bantumi_level = (uint8_t)(bt_settings.level + 1);
+    bantumi_beans = bt_beans_count();
+    bt_done(bantumi_play_open(event, a));
+}
+
+static uint8_t bt_elapse(void)
+{
+    uint8_t done = bantumi_play_elapse(MENU_FRAME_US);
+
+    if (done & BANTUMI_PLAY_TICKED)
+        bt_demo_waiting = 0;
+    return done ? bt_done(done) : 0;
+}
+
+static uint8_t bt_play_key(uint8_t key)
+{
+    static const uint8_t codes[] = { BANTUMI_KEY_HASH, 0xff, 5, BANTUMI_KEY_STAR, 4, 6 };
+    uint8_t code = key < sizeof codes ? codes[key] : 0xfe;
+
+    if (code == 0xff)
+        return 0;
+    if (code == 0xfe) {
+        /* Pause: the game puts itself away, as on the phone. */
+        bantumi_play_call(BANTUMI_EVENT_PAUSE, 0);
+        bantumi_play_stop(0);
+        bt_paused = 1;
+        board_drawn = 0;
+        bt_menu_open();
+        return 1;
+    }
+    return bt_done(bantumi_play_key(code));
+}
+
+static void bt_menu_select(void)
+{
+    switch (bt_item_id(bt_item)) {
+    case BT_ITEM_CONTINUE:
+        /* As the phone does: a new game, then the game it put away, which
+           stands still until a key. */
+        bt_paused = 0;
+        bantumi_play_call(BANTUMI_EVENT_NEW_GAME, 1);
+        bt_open(SCREEN_BT_PLAY, BANTUMI_EVENT_CONTINUE, 0);
+        bantumi_play_stop(1);
+        break;
+    case BT_ITEM_NEW_GAME:
+        bt_paused = 0;
+        bt_open(SCREEN_BT_PLAY, BANTUMI_EVENT_NEW_GAME, 1);
+        bt_done(bantumi_play_open(BANTUMI_EVENT_START, 0));
+        break;
+    case BT_ITEM_OPTIONS:
+        screen = SCREEN_BT_OPTIONS;
+        bt_option = 0;
+        break;
+    default:
+        bt_help_open(0);
+        break;
+    }
+}
+
+/* More or Down: the next page, or after the last one the text's demo. */
+static void bt_help_forward(void)
+{
+    if (*si_help_next) {
+        if (si_help_pageno < SI_HELP_PAGES - 1)
+            si_help_pages[++si_help_pageno] = si_help_next;
+        si_help_page = si_help_next;
+        return;
+    }
+    bt_demo_waiting = 1;
+    bt_open(SCREEN_BT_DEMO, BANTUMI_EVENT_DEMO, (uint8_t)(bt_help + 1));
+}
+
 static uint8_t select_count(void)
 {
     return full_screen ? GAME_COUNT + 1 : GAME_COUNT;
@@ -1104,6 +1299,18 @@ static uint8_t handle_key(uint8_t key)
         return play_key(key);
     if (screen == SCREEN_SI_PLAY)
         return si_play_key(key);
+    if (screen == SCREEN_BT_PLAY)
+        return bt_play_key(key);
+    if (screen == SCREEN_BT_DEMO) {
+        /* As in Space Impact's: any key ends a demo, C back to the menu. */
+        bantumi_play_call(BANTUMI_EVENT_PAUSE, 0);
+        bantumi_play_stop(0);
+        if (key == MENU_KEY_BACK)
+            bt_menu_open();
+        else
+            bt_help_next();
+        return 1;
+    }
     if (screen == SCREEN_SI_DEMO) {
         /* Any key ends a demo, as a pause; C goes back to the game's menu,
            the others on to the next text. */
@@ -1130,6 +1337,71 @@ static uint8_t handle_key(uint8_t key)
     case SCREEN_SI_SCORES:
         si_send(SI_EVENT_KEY_DOWN, si_code(key));
         screen = SCREEN_SI_MENU;
+        return 1;
+    case SCREEN_BT_TITLE:
+        /* A key ends the title: C back to the list, any other into the
+           game's menu. */
+        bantumi_play_call(BANTUMI_EVENT_PAUSE, 0);
+        bantumi_play_stop(0);
+        if (key == MENU_KEY_BACK)
+            screen = SCREEN_SELECT;
+        else
+            bt_menu_open();
+        return 1;
+    case SCREEN_BT_MENU:
+        if (key == MENU_KEY_DOWN || key == MENU_KEY_UP)
+            list_move(key, bt_item_count(), &bt_item, &bt_item_top);
+        else if (key == MENU_KEY_SELECT)
+            bt_menu_select();
+        else if (key == MENU_KEY_BACK)
+            screen = SCREEN_SELECT;
+        break;
+    case SCREEN_BT_OPTIONS:
+        if (key == MENU_KEY_DOWN || key == MENU_KEY_UP) {
+            short_list_move(key, 2, &bt_option);
+        } else if (key == MENU_KEY_SELECT) {
+            if (bt_option == 0) {
+                screen = SCREEN_BT_BEANS;
+                bt_beans = (uint8_t)(bt_beans_count() - 3);
+            } else {
+                screen = SCREEN_BT_LEVEL;
+                bt_level = bt_settings.level;
+            }
+        } else if (key == MENU_KEY_BACK) {
+            screen = SCREEN_BT_MENU;
+        }
+        break;
+    case SCREEN_BT_BEANS:
+        if (key == MENU_KEY_DOWN || key == MENU_KEY_UP) {
+            short_list_move(key, 3, &bt_beans);
+        } else if (key == MENU_KEY_SELECT) {
+            bt_settings.option = (uint8_t)(bt_beans + 1);
+            platform_settings_save(GAME_BANTUMI, &bt_settings);
+            screen = SCREEN_BT_OPTIONS;
+        } else if (key == MENU_KEY_BACK) {
+            screen = SCREEN_BT_OPTIONS;
+        }
+        break;
+    case SCREEN_BT_LEVEL:
+        if (key == MENU_KEY_UP && bt_level < BANTUMI_LEVELS - 1) {
+            bt_level++;
+        } else if (key == MENU_KEY_DOWN && bt_level > 0) {
+            bt_level--;
+        } else if (key == MENU_KEY_SELECT) {
+            bt_settings.level = bt_level;
+            platform_settings_save(GAME_BANTUMI, &bt_settings);
+            screen = SCREEN_BT_OPTIONS;
+        } else if (key == MENU_KEY_BACK) {
+            screen = SCREEN_BT_OPTIONS;
+        }
+        return 1;
+    case SCREEN_BT_HELP:
+        if (key == MENU_KEY_SELECT || key == MENU_KEY_DOWN)
+            bt_help_forward();
+        else if (key == MENU_KEY_UP)
+            si_help_back();
+        else if (key == MENU_KEY_BACK)
+            screen = SCREEN_BT_MENU;
         return 1;
     case SCREEN_SI_MENU:
         if (key == MENU_KEY_DOWN || key == MENU_KEY_UP)
@@ -1194,6 +1466,11 @@ static uint8_t handle_key(uint8_t key)
                 si_top = record.top_score;
                 si_paused = 0;
                 si_open(SCREEN_SI_TITLE, SI_EVENT_TITLE, 0);
+            } else if (game == GAME_BANTUMI) {
+                if (!platform_settings_load(GAME_BANTUMI, &bt_settings))
+                    bt_settings.level = bt_settings.option = 0;
+                bt_paused = 0;
+                bt_open(SCREEN_BT_TITLE, BANTUMI_EVENT_TITLE, 0);
             } else if (game == GAME_SNAKE) {
                 paused = 0;
                 screen = SCREEN_TITLE;
@@ -1318,12 +1595,14 @@ uint8_t menu_key(uint8_t key)
     uint8_t was_screen = screen, was_games = games_item, was_game = game, was_item = item, was_top = item_top;
     uint8_t was_setting = setting, was_value = value, was_maze = maze, was_option = option, was_page = help_page;
     uint8_t was_si_item = si_item, was_si_top = si_item_top;
+    uint8_t was_bt_item = bt_item, was_bt_top = bt_item_top, was_bt_option = bt_option, was_beans = bt_beans;
     uint8_t changed;
 
     changed = handle_key(key);
     return changed || screen != was_screen || games_item != was_games || game != was_game || item != was_item
            || item_top != was_top || setting != was_setting || value != was_value || maze != was_maze
-           || option != was_option || help_page != was_page || si_item != was_si_item || si_item_top != was_si_top;
+           || option != was_option || help_page != was_page || si_item != was_si_item || si_item_top != was_si_top
+           || bt_item != was_bt_item || bt_item_top != was_bt_top || bt_option != was_bt_option || bt_beans != was_beans;
 }
 
 void menu_seed(uint16_t seed)
@@ -1349,6 +1628,11 @@ uint8_t menu_tick(void)
     case SCREEN_SI_DEMO:
     case SCREEN_SI_SCORES:
         changed = si_elapse();
+        break;
+    case SCREEN_BT_TITLE:
+    case SCREEN_BT_PLAY:
+    case SCREEN_BT_DEMO:
+        changed = bt_elapse();
         break;
     case SCREEN_SI_DONE:
         if (!--si_done_frames) {
@@ -1446,12 +1730,28 @@ static void draw_phone(void)
         draw_list(text_mazes, SNAKE2_MAZE_COUNT, maze, maze_top, maze_name, text_select);
         break;
     case SCREEN_LEVEL:
-        draw_level();
+        draw_level(SNAKE2_LEVELS, level);
+        break;
+    case SCREEN_BT_MENU:
+        draw_list(text_bantumi, bt_item_count(), bt_item, bt_item_top, bt_item_name, text_select);
+        break;
+    case SCREEN_BT_OPTIONS:
+        draw_list(text_game_options, 2, bt_option, 0, bt_option_name, text_select);
+        break;
+    case SCREEN_BT_BEANS:
+        draw_list(text_no_of_beans, 3, bt_beans, 0, bt_beans_name, text_select);
+        break;
+    case SCREEN_BT_LEVEL:
+        draw_level(BANTUMI_LEVELS, bt_level);
+        break;
+    case SCREEN_BT_HELP:
+        si_help_next = draw_wrapped(&font_small_bold, 0, LIST_Y, HELP_LINE_HEIGHT, SI_HELP_LINES, LCD_WIDTH, si_help_page);
+        draw_softkeys(text_more, text_back);
         break;
 
     case SCREEN_HELP:
         draw_header(text_instructions, (uint8_t)(help_page + 1));
-        draw_wrapped(&font_small_plain, 0, LIST_Y, HELP_LINE_HEIGHT, HELP_LINES, LCD_WIDTH, help_text(help_page));
+        draw_wrapped(&font_small_plain, 0, LIST_Y, HELP_LINE_HEIGHT, HELP_LINES, LCD_WIDTH, help_load(help_text(help_page)));
         draw_softkeys(text_more, text_back);
         break;
     default:
@@ -1638,12 +1938,32 @@ static void draw_native(void)
         native_note(text_level, "%N", (uint16_t)(level + 1));
         native_hint(text_hint_select);
         break;
+    case SCREEN_BT_MENU:
+        native_list(text_bantumi, bt_item_count(), bt_item, bt_item_name);
+        break;
+    case SCREEN_BT_OPTIONS:
+        native_list(text_game_options, 2, bt_option, bt_option_name);
+        break;
+    case SCREEN_BT_BEANS:
+        native_list(text_no_of_beans, 3, bt_beans, bt_beans_name);
+        break;
+    case SCREEN_BT_LEVEL:
+        native_note(text_level, "%N", (uint16_t)(bt_level + 1));
+        native_hint(text_hint_select);
+        break;
+    case SCREEN_BT_HELP:
+        native_title(text_instructions);
+        si_help_next = draw_wrapped(&NATIVE_BODY_FONT, NATIVE_MARGIN, NATIVE_LIST_Y, NATIVE_ROW_HEIGHT,
+                                    (uint8_t)((NATIVE_HINT_Y - 3 - NATIVE_LIST_Y) / NATIVE_ROW_HEIGHT),
+                                    LCD_FB_WIDTH - 2 * NATIVE_MARGIN, si_help_page);
+        native_hint(text_hint_more);
+        break;
 
     case SCREEN_HELP:
         native_title(text_instructions);
         draw_wrapped(&NATIVE_BODY_FONT, NATIVE_MARGIN, NATIVE_LIST_Y, NATIVE_ROW_HEIGHT,
                      (uint8_t)((NATIVE_HINT_Y - 3 - NATIVE_LIST_Y) / NATIVE_ROW_HEIGHT),
-                     LCD_FB_WIDTH - 2 * NATIVE_MARGIN, help_text(help_page));
+                     LCD_FB_WIDTH - 2 * NATIVE_MARGIN, help_load(help_text(help_page)));
         native_hint(text_hint_more);
         break;
     default:
@@ -1658,13 +1978,14 @@ void menu_draw(void)
        leaving a screen that drew around the LCD, clears everything. */
     uint8_t picture = screen == SCREEN_PLAY || screen == SCREEN_TITLE || screen == SCREEN_GAME_OVER
                       || screen == SCREEN_HIGH_SCORES || screen == SCREEN_SI_TITLE || screen == SCREEN_SI_PLAY
-                      || screen == SCREEN_SI_SCORES || screen == SCREEN_SI_DEMO;
+                      || screen == SCREEN_SI_SCORES || screen == SCREEN_SI_DEMO || screen == SCREEN_BT_TITLE
+                      || screen == SCREEN_BT_PLAY || screen == SCREEN_BT_DEMO;
     uint8_t mode = full_screen && screen != SCREEN_MAIN && !picture ? VIEW_NATIVE : VIEW_PHONE;
 #ifdef NATIVE_PLATFORM_TILES
     uint16_t was_tiled = tiled_id;
 #endif
 
-    if (screen == SCREEN_SI_DEMO && si_demo_waiting)
+    if ((screen == SCREEN_SI_DEMO && si_demo_waiting) || (screen == SCREEN_BT_DEMO && bt_demo_waiting))
         return;
 #ifdef NATIVE_PLATFORM_TILES
     tiled_id = NATIVE_NONE;
@@ -1726,6 +2047,12 @@ void menu_draw(void)
             if (si_show_last)
                 draw_score_box(si_last_score, LCD_HEIGHT - 19, 0);
         }
+        sprite_present(!board_drawn);
+        board_drawn = 1;
+        return;
+    }
+    if (screen == SCREEN_BT_TITLE || screen == SCREEN_BT_PLAY || screen == SCREEN_BT_DEMO) {
+        bantumi_render(!board_drawn);
         sprite_present(!board_drawn);
         board_drawn = 1;
         return;

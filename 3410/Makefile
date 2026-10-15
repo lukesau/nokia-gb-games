@@ -31,7 +31,9 @@ MAKEBIN ?= makebin
 SDAS ?= sdasgb
 GB_FB := -DLCD_FB_WIDTH=160 -DLCD_FB_HEIGHT=144 -DLCD_PHONE_X=32 -DLCD_PHONE_Y=40
 GB_CFLAGS = -msm83 --opt-code-speed $(GB_FB) -DSNAKE2_STATE_AT=0xa100 -DSNAKE2_STATE_END=0xc000 \
-	-DSI_BANKED -DSI_PLATFORM_ROWS -DSI_ROWS_FAR=9 -DSI_ROWS_AT=0xb300 -DSI_ROWS_END=0xc000 -DSI_ROWS_BLOCK=gb_block_rows -DSI_ROWS_PUT=gb_rows_put -DSI_ROWS_FILL=gb_fill -DSI_ROWS_MADE=gb_rows_made -DSI_ROWS_TERRAIN -DSI_PLATFORM_FIND_HIT -DSI_PICS_AT=0xa100 -DSI_STATE_AT=0xa900 -DSI_STATE_END=0xb300 -DLCD_PLATFORM_COLUMNS -DSPRITE_PLATFORM_BAND -DSPRITE_PLATFORM_PRESENT -DNATIVE_PLATFORM_TILES -DNATIVE_PLATFORM_PALETTE -Icore -I$(COMMON)/core -Iplatform/gb -I$(COMMON)/platform/gb -I$(ASSETS)
+	-DSI_BANKED -DSI_PLATFORM_ROWS -DSI_ROWS_FAR=9 -DSI_ROWS_AT=0xb300 -DSI_ROWS_END=0xc000 -DSI_ROWS_BLOCK=gb_block_rows -DSI_ROWS_PUT=gb_rows_put -DSI_ROWS_FILL=gb_fill -DSI_ROWS_MADE=gb_rows_made -DSI_ROWS_TERRAIN -DSI_PLATFORM_FIND_HIT -DSI_PICS_AT=0xa100 -DSI_STATE_AT=0xa900 -DSI_STATE_END=0xb300 -DLCD_PLATFORM_COLUMNS -DSPRITE_PLATFORM_BAND -DSPRITE_PLATFORM_PRESENT -DNATIVE_PLATFORM_TILES -DNATIVE_PLATFORM_PALETTE \
+	-DMENU_TEXT_FAR -DBANTUMI_BANKED -DBANTUMI_PLATFORM_SEARCH -DBANTUMI_STATE_AT=0xa900 -DBANTUMI_STATE_END=0xab00 -DBANTUMI_SAVED_AT=0xab00 -DBANTUMI_SAVED_END=0xac00 \
+	-Icore -I$(COMMON)/core -I$(COMMON)/bantumi -Iplatform/gb -I$(COMMON)/platform/gb -I$(ASSETS)
 # The SameBoy clone scripts/setup-sameboy.sh makes: its boot ROM, and its
 # core as a library (`make -C $(SAMEBOY) lib`) for tools/gb_run.
 SAMEBOY ?= ../tools/SameBoy
@@ -46,10 +48,10 @@ BUILD := build
 COMMON := ../common
 ASSETS := $(BUILD)/assets
 ASSET_SRC := $(ASSETS)/game_assets.c $(ASSETS)/snake2_data.c $(ASSETS)/game_tables.c $(ASSETS)/si_data.c \
-	$(ASSETS)/si_rows_a.c $(ASSETS)/si_rows_b.c $(ASSETS)/si_rows_index.c
-CORE_SRC := $(wildcard core/*.c) $(wildcard $(COMMON)/core/*.c)
-CORE_HDR := $(wildcard core/*.h) $(wildcard $(COMMON)/core/*.h)
-INCLUDES := -Icore -I$(COMMON)/core -Iplatform/host -I$(COMMON)/platform/host -I$(ASSETS)
+	$(ASSETS)/si_rows_a.c $(ASSETS)/si_rows_b.c $(ASSETS)/si_rows_index.c $(ASSETS)/bantumi_data.c $(ASSETS)/game_apart.c
+CORE_SRC := $(wildcard core/*.c) $(wildcard $(COMMON)/core/*.c) $(COMMON)/bantumi/bantumi.c
+CORE_HDR := $(wildcard core/*.h) $(wildcard $(COMMON)/core/*.h) $(wildcard $(COMMON)/bantumi/*.h)
+INCLUDES := -Icore -I$(COMMON)/core -I$(COMMON)/bantumi -Iplatform/host -I$(COMMON)/platform/host -I$(ASSETS)
 
 GB_ROM := $(BUILD)/nokia3410.gb
 GB_TEST_ROM := $(BUILD)/nokia3410-keys.gb
@@ -60,7 +62,9 @@ GB_BANK0 := platform/gb/main.c platform/gb/far.c platform/gb/screen.c $(COMMON)/
 # whenever the menus draw.
 GB_BANK1 := core/menu.c $(ASSETS)/game_assets.c
 GB_BANK2 := core/snake2.c core/title.c $(ASSETS)/snake2_data.c
-GB_BANK3 := $(COMMON)/platform/gb/native_tiles.c $(ASSETS)/native_data.c
+# With them the Instructions' texts, which the menus copy out when they show
+# one, and the menu pages' header with its font, which far.c reaches.
+GB_BANK3 := $(COMMON)/platform/gb/native_tiles.c $(ASSETS)/native_data.c $(ASSETS)/game_apart.c core/menu_header.c
 GB_BANK4 := $(ASSETS)/native_data.c
 # Space Impact: each bank its data first, then a part of the game.
 GB_SI_BANKS := 5 6 7 8 11
@@ -69,6 +73,11 @@ GB_BANK6 := core/si_move.c
 GB_BANK7 := core/si_hit.c
 GB_BANK8 := core/si_screens.c core/si_pic.c
 GB_BANK11 := core/si_demo.c
+# Bantumi: the game, what drives it, its data, the search (search.s) and the graphics
+# library's drawing again (core/si_pic.c, SI_PIC_RENDER_ONLY), which reads
+# the pictures where they are.
+GB_BANTUMI_BANK := 12
+GB_BANK12 := $(COMMON)/bantumi/bantumi.c core/bantumi_play.c $(ASSETS)/bantumi_data.c
 # The pictures as the Game Boy draws them (core/si_rows.h): what draws
 # them in the first bank, their rows in two of their own.
 GB_ROWS_BANK := 9
@@ -76,7 +85,8 @@ gb_rels = $(patsubst %.c,$(BUILD)/gb/$(1)/%.rel,$(notdir $(2)))
 GB_RELS := $(call gb_rels,0,$(filter-out platform/gb/main.c,$(GB_BANK0))) $(call gb_rels,1,$(GB_BANK1)) \
 	$(call gb_rels,2,$(GB_BANK2)) $(call gb_rels,3,$(GB_BANK3)) $(call gb_rels,4,$(GB_BANK4)) \
 	$(BUILD)/gb/$(GB_ROWS_BANK)/si_rows_a.rel $(BUILD)/gb/$(GB_ROWS_BANK)/si_rows_b.rel $(BUILD)/gb/4/si_rows.rel \
-	$(foreach n,$(GB_SI_BANKS),$(BUILD)/gb/$(n)/si_data.rel $(call gb_rels,$(n),$(GB_BANK$(n))))
+	$(foreach n,$(GB_SI_BANKS),$(BUILD)/gb/$(n)/si_data.rel $(call gb_rels,$(n),$(GB_BANK$(n)))) \
+	$(call gb_rels,12,$(GB_BANK12)) $(BUILD)/gb/12/bantumi_pic.rel
 
 # Keys a test ROM presses at power-on (see menu_script in core/menu.c), for
 # scripted screenshots and the checks against the host's frame for them.
@@ -84,9 +94,9 @@ GB_RELS := $(call gb_rels,0,$(filter-out platform/gb/main.c,$(GB_BANK0))) $(call
 # presses none.
 KEYS ?= sssss
 # The game without the menus, for tools that drive it directly.
-GAME_SRC := $(filter-out core/menu.c $(COMMON)/core/font.c,$(CORE_SRC))
+GAME_SRC := $(filter-out core/menu.c core/menu_header.c $(COMMON)/core/font.c,$(CORE_SRC))
 
-.PHONY: help dump install-roms assets test frames golden-snake golden-si golden-si-menus golden-si-demos check-golden check-menus gb check-gb bench-gb bench-report shot-gb run-gb cards clean
+.PHONY: help dump install-roms assets test frames golden-snake golden-si golden-si-menus golden-si-demos golden-bantumi golden-bantumi-demos check-golden check-menus gb check-gb bench-gb bench-report shot-gb run-gb cards clean
 
 help:
 	@echo "make dump      rebuild $(DUMP) from the Wintesla files in FLASH_FILES=$(FLASH_FILES)"
@@ -94,6 +104,7 @@ help:
 	@echo "make assets    extract the game data from DUMP=$(DUMP) into $(ASSETS)/"
 	@echo "make frames    write the host reference frames to $(BUILD)/frame_*.pgm"
 	@echo "make golden-snake record Snake II games in MAME into golden/snake2-*/"
+	@echo "make golden-bantumi record Bantumi games in MAME into golden/bantumi-*/"
 	@echo "make check-golden replay the recorded runs through the core and compare every frame"
 	@echo "make check-menus compare the menu pages with the phone's in golden/menus/"
 	@echo "make gb        build $(GB_ROM)"
@@ -125,11 +136,11 @@ install-roms:
 
 assets: $(ASSET_SRC)
 
-$(ASSETS)/game_assets.c: tools/extract_assets.py tools/extract_si.py
+$(ASSETS)/game_assets.c: tools/extract_assets.py tools/extract_si.py tools/extract_bantumi.py
 	$(PYTHON) tools/extract_assets.py "$(DUMP)" $(ASSETS)
 
 $(ASSETS)/snake2_data.c $(ASSETS)/game_tables.c $(ASSETS)/si_data.c $(ASSETS)/si_rows_a.c $(ASSETS)/si_rows_b.c \
-	$(ASSETS)/si_rows_index.c: $(ASSETS)/game_assets.c
+	$(ASSETS)/si_rows_index.c $(ASSETS)/bantumi_data.c $(ASSETS)/game_apart.c: $(ASSETS)/game_assets.c
 
 $(BUILD)/test_core: tests/test_core.c $(COMMON)/core/lcd.c core/rand.c core/sprite.c $(CORE_HDR)
 	@mkdir -p $(BUILD)
@@ -148,6 +159,9 @@ frames: $(BUILD)/frame_testcard.pgm $(BUILD)/frame_start.pgm $(BUILD)/frame_run-
 
 $(BUILD)/si_replay: platform/host/si_replay_main.c $(COMMON)/platform/host/pgm.c $(GAME_SRC) $(CORE_HDR) $(ASSET_SRC)
 	$(CC) $(CFLAGS) -DSI_DEBUG $(INCLUDES) -o $@ platform/host/si_replay_main.c $(COMMON)/platform/host/pgm.c $(GAME_SRC) $(ASSET_SRC)
+
+$(BUILD)/bantumi_replay: platform/host/bantumi_replay_main.c $(COMMON)/platform/host/pgm.c $(GAME_SRC) $(CORE_HDR) $(ASSET_SRC)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ platform/host/bantumi_replay_main.c $(COMMON)/platform/host/pgm.c $(GAME_SRC) $(ASSET_SRC)
 
 $(BUILD)/replay: platform/host/replay_main.c $(COMMON)/platform/host/pgm.c $(GAME_SRC) $(CORE_HDR) $(ASSET_SRC)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ platform/host/replay_main.c $(COMMON)/platform/host/pgm.c $(GAME_SRC) $(ASSET_SRC)
@@ -233,8 +247,49 @@ golden-si-demos:
 	cp run_golden_si/nokia_dct3_lcdmirror_*.pgm golden/si-i/
 	$(PYTHON) tools/si_events.py --demos run_golden_si/error.log golden/si-i
 
+# Bantumi's reference runs: the firmware's own game played by the fork's
+# autopilot, which picks pits with a seeded generator of its own and walks
+# the hand there, to the game's end. A run is NAME:LEVEL:SECONDS[:SWITCHES],
+# the switches more of the autopilot's, comma-separated: a asks for hints
+# at level 1 and passes the first move to the phone, c pauses and
+# continues. The pits start with the beans the phone's own record says.
+BANTUMI_GOLDENS ?= a:1:300:B_SEED=3,B_HINT_EVERY=3,B_PASS=1 b:2:300:B_SEED=7 c:3:300:B_SEED=3,B_PAUSE_AT=40 \
+	d:5:600:B_SEED=5
+BANTUMI_KEYS := enter,wait1500,up,wait300,up,wait300,up,wait300,up,wait1000,enter,wait1500,enter,wait1500,down,wait500,down,wait500,down,wait500,enter,wait5000,enter,wait3000
+# The fork's autopilot.
+BANTUMI_BOT ?= $(DCT3_RE)/mame_nokia_3410_bantumi_bot.lua
+
+golden-bantumi:
+	@test -x $(DCT3_RE)/mame/mame || { echo "Missing $(DCT3_RE)/mame/mame: build the fork first"; exit 1; }
+	@for run in $(BANTUMI_GOLDENS); do \
+		set -- $$(echo $$run | tr : ' '); dir=golden/bantumi-$$1; \
+		rm -rf run_golden_bantumi $$dir && mkdir -p run_golden_bantumi $$dir && \
+		$(MAKE) -C $(DCT3_RE) run-keys GAMES_PRODUCT=3410 RUN_DIR=$(abspath run_golden_bantumi) SECONDS=$$3 KEYS=$(BANTUMI_KEYS) \
+			RUN_NVRAM_DIR=$(abspath run_golden_bantumi)/nvram RUN_ENV="B_LEVEL=$$2 $$(echo $$4 | tr , ' ')" \
+			RUN_EXTRA_ARGS="-autoboot_script $(abspath $(BANTUMI_BOT)) -debug -debugger none" || exit 1; \
+		cp run_golden_bantumi/nokia_dct3_lcdmirror_*.pgm $$dir/ && \
+		$(PYTHON) tools/bantumi_events.py run_golden_bantumi/error.log $$dir || exit 1; \
+	done
+
+# The Instructions with their five demos, each left to run to its end:
+# recorded from the first demo on (tools/bantumi_events.py --demos) into
+# golden/bantumi-i, and the title before them into golden/bantumi-t, which
+# check-golden replays with the rest.
+BANTUMI_DEMO_KEYS := $(BANTUMI_KEYS:,enter,wait3000=),down,wait800,down,wait1500,enter,wait2000$(subst $(eval) ,,$(foreach n,1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16,,enter,wait20000))
+
+golden-bantumi-demos:
+	@test -x $(DCT3_RE)/mame/mame || { echo "Missing $(DCT3_RE)/mame/mame: build the fork first"; exit 1; }
+	rm -rf run_golden_bantumi golden/bantumi-i golden/bantumi-t && mkdir -p run_golden_bantumi golden/bantumi-i golden/bantumi-t
+	$(MAKE) -C $(DCT3_RE) run-keys GAMES_PRODUCT=3410 RUN_DIR=$(abspath run_golden_bantumi) SECONDS=400 KEYS=$(BANTUMI_DEMO_KEYS) \
+		RUN_NVRAM_DIR=$(abspath run_golden_bantumi)/nvram \
+		RUN_EXTRA_ARGS="-autoboot_script $(abspath $(BANTUMI_BOT)) -debug -debugger none"
+	cp run_golden_bantumi/nokia_dct3_lcdmirror_*.pgm golden/bantumi-i/
+	$(PYTHON) tools/bantumi_events.py --demos run_golden_bantumi/error.log golden/bantumi-i
+	cp run_golden_bantumi/nokia_dct3_lcdmirror_*.pgm golden/bantumi-t/
+	$(PYTHON) tools/bantumi_events.py --title run_golden_bantumi/error.log golden/bantumi-t
+
 # Skipped when the reference runs have not been recorded.
-check-golden: $(BUILD)/replay $(BUILD)/si_replay
+check-golden: $(BUILD)/replay $(BUILD)/si_replay $(BUILD)/bantumi_replay
 	@for dir in golden/snake2-*; do \
 		if [ -f $$dir/events.txt ]; then \
 			out=$$(mktemp -d) && $(BUILD)/replay $$dir/events.txt $$out $$(cat $$dir/setup.txt) && \
@@ -251,6 +306,14 @@ check-golden: $(BUILD)/replay $(BUILD)/si_replay
 			fi; \
 		else echo "no $$dir/events.txt: run make golden-si; skipped"; fi; \
 	done
+	@for dir in golden/bantumi-*; do \
+		if [ -f $$dir/events.txt ]; then \
+			out=$$(mktemp -d) && $(BUILD)/bantumi_replay $$dir/events.txt $$out $$(cat $$dir/setup.txt) && \
+			$(PYTHON) tools/check_replay.py $$out $$dir || exit 1; \
+			diff $$dir/sounds.txt $$out/sounds.txt > $$out/sounds.diff \
+				|| { echo "$$dir: sounds differ (phone <, replay >):"; head -20 $$out/sounds.diff; exit 1; }; \
+		else echo "no $$dir/events.txt: run make golden-bantumi; skipped"; fi; \
+	done
 
 # The menu pages against frames of the phone's own, captured in MAME and
 # named after the host frame they must equal. Derived from the firmware, so
@@ -262,7 +325,7 @@ FORCE:
 
 # Game Boy
 
-vpath %.c core $(COMMON)/core platform/gb $(COMMON)/platform/gb $(ASSETS)
+vpath %.c core $(COMMON)/core $(COMMON)/bantumi platform/gb $(COMMON)/platform/gb $(ASSETS)
 
 # games.c reaches the game in bank 2 through far.c, and menu.c the title
 # and the game-over picture.
@@ -270,7 +333,7 @@ $(BUILD)/gb/0/games.rel: GB_EXTRA := -Dsnake2_handler=far_snake2_handler -Dsnake
 $(BUILD)/gb/1/menu.rel: GB_EXTRA := -Dtitle_start=far_title_start -Dtitle_elapse=far_title_elapse -Dtitle_draw=far_title_draw \
 	-Dover_start=far_over_start -Dover_elapse=far_over_elapse -Dover_draw=far_over_draw \
 	-Dscores_start=far_scores_start -Dscores_elapse=far_scores_elapse -Dscores_draw=far_scores_draw \
-	-Ddraw_score_box=far_draw_score_box
+	-Ddraw_score_box=far_draw_score_box -Dmenu_header_draw=far_menu_header
 
 $(BUILD)/gb/0/%.rel: %.c $(CORE_HDR) $(ASSET_SRC)
 	@mkdir -p $(BUILD)/gb/0
@@ -336,6 +399,22 @@ $(foreach n,$(filter-out 5,$(GB_SI_BANKS)),$(eval $(BUILD)/gb/$(n)/si_data.rel: 
 $(ASSETS)/native_data.c: $(BUILD)/frame_gb
 	$(BUILD)/frame_gb native $@
 
+# Bantumi's bank: the game draws with the graphics library's drawing built
+# again there, under its own name.
+$(BUILD)/gb/12/%.rel: %.c $(CORE_HDR) $(ASSET_SRC)
+	@mkdir -p $(@D)
+	$(SDCC) $(GB_CFLAGS) -Dsi_pic_render=bantumi_pic_render --codeseg CODE_12 -bo 12 -c $< -o $@
+
+$(BUILD)/gb/12/bantumi_pic.rel: core/si_pic.c $(CORE_HDR)
+	@mkdir -p $(@D)
+	$(SDCC) $(GB_CFLAGS) -DSI_PIC_RENDER_ONLY -Dsi_pic_render=bantumi_pic_render --codeseg CODE_12 -bo 12 -c $< -o $@
+
+# Bantumi's search, in its bank.
+$(BUILD)/gb/search.rel: $(COMMON)/bantumi/search.s
+	@mkdir -p $(BUILD)/gb
+	sed 's/_CODE_BANTUMI/_CODE_12/' $< > $(BUILD)/gb/search.s
+	$(SDAS) -o $@ $(BUILD)/gb/search.s
+
 $(BUILD)/gb/%.rel: platform/gb/%.s
 	@mkdir -p $(BUILD)/gb
 	$(SDAS) -o $@ $<
@@ -344,12 +423,12 @@ $(BUILD)/gb/%.rel: $(COMMON)/platform/gb/%.s
 	@mkdir -p $(BUILD)/gb
 	$(SDAS) -o $@ $<
 
-# MBC5 with its rumble pin and battery-backed RAM, sixteen ROM banks (nine
+# MBC5 with its rumble pin and battery-backed RAM, sixteen ROM banks (13
 # used) and 8 KiB of RAM. The linker does not mind the first bank running
 # over into the second, so its end is checked here.
-$(BUILD)/nokia3410%gb: $(BUILD)/gb/crt0.rel $(BUILD)/gb/blocks.rel $(BUILD)/gb/native_put.rel $(BUILD)/gb/band.rel $(BUILD)/gb/bcall.rel $(BUILD)/gb/si_fast.rel $(BUILD)/gb/0/main%rel $(GB_RELS)
+$(BUILD)/nokia3410%gb: $(BUILD)/gb/crt0.rel $(BUILD)/gb/search.rel $(BUILD)/gb/blocks.rel $(BUILD)/gb/native_put.rel $(BUILD)/gb/band.rel $(BUILD)/gb/bcall.rel $(BUILD)/gb/si_fast.rel $(BUILD)/gb/0/main%rel $(GB_RELS)
 	$(SDCC) -msm83 --no-std-crt0 -Wl-b_CODE_1=0x14000 -Wl-b_CODE_2=0x24000 -Wl-b_CODE_3=0x34000 -Wl-b_CODE_4=0x44000 \
-		$(foreach n,$(GB_SI_BANKS),-Wl-b_CODE_$(n)=0x$(shell printf %X $(n))4000) -Wl-b_CODE_9=0x94000 -Wl-b_CODE_10=0xA4000 \
+		$(foreach n,$(GB_SI_BANKS),-Wl-b_CODE_$(n)=0x$(shell printf %X $(n))4000) -Wl-b_CODE_9=0x94000 -Wl-b_CODE_10=0xA4000 -Wl-b_CODE_12=0xC4000 \
 		-o $(BUILD)/gb/$(basename $(notdir $@)).ihx $^
 	@$(PYTHON) $(COMMON)/tools/gb_bank_check.py $(BUILD)/gb/$(basename $(notdir $@)).map
 	@$(PYTHON) tools/gb_mirror_check.py $(BUILD)/gb/$(basename $(notdir $@)).map
@@ -361,7 +440,7 @@ $(BUILD)/nokia3410%gb: $(BUILD)/gb/crt0.rel $(BUILD)/gb/blocks.rel $(BUILD)/gb/n
 BENCH ?= golden/si-d
 BENCH_DIR := $(BUILD)/bench
 GB_BENCH_ROM := $(BUILD)/nokia3410-bench.gb
-GB_BASE_RELS := $(BUILD)/gb/crt0.rel $(BUILD)/gb/blocks.rel $(BUILD)/gb/native_put.rel $(BUILD)/gb/band.rel \
+GB_BASE_RELS := $(BUILD)/gb/crt0.rel $(BUILD)/gb/search.rel $(BUILD)/gb/blocks.rel $(BUILD)/gb/native_put.rel $(BUILD)/gb/band.rel \
 	$(BUILD)/gb/bcall.rel $(BUILD)/gb/si_fast.rel $(GB_RELS)
 
 $(BENCH_DIR)/si_bench.h: $(BENCH)/events.txt $(BENCH)/setup.txt tools/si_bench.py
@@ -379,8 +458,8 @@ $(GB_BENCH_ROM): $(GB_BASE_RELS) $(BUILD)/gb/0/main-bench.rel $(BENCH_DIR)/si_be
 		rels="$$rels $(BENCH_DIR)/si_bench_$$n.rel"; banks="$$banks -Wl-b_CODE_$$b=0x$$(printf %X $$b)4000"; \
 	done; \
 	$(SDCC) -msm83 --no-std-crt0 -Wl-b_CODE_1=0x14000 -Wl-b_CODE_2=0x24000 -Wl-b_CODE_3=0x34000 -Wl-b_CODE_4=0x44000 \
-		$(foreach n,$(GB_SI_BANKS),-Wl-b_CODE_$(n)=0x$(shell printf %X $(n))4000) -Wl-b_CODE_9=0x94000 -Wl-b_CODE_10=0xA4000 $$banks \
-		-o $(BUILD)/gb/nokia3410-bench.ihx $(BUILD)/gb/crt0.rel $(BUILD)/gb/blocks.rel $(BUILD)/gb/native_put.rel \
+		$(foreach n,$(GB_SI_BANKS),-Wl-b_CODE_$(n)=0x$(shell printf %X $(n))4000) -Wl-b_CODE_9=0x94000 -Wl-b_CODE_10=0xA4000 -Wl-b_CODE_12=0xC4000 $$banks \
+		-o $(BUILD)/gb/nokia3410-bench.ihx $(BUILD)/gb/crt0.rel $(BUILD)/gb/search.rel $(BUILD)/gb/blocks.rel $(BUILD)/gb/native_put.rel \
 		$(BUILD)/gb/band.rel $(BUILD)/gb/bcall.rel $(BUILD)/gb/si_fast.rel $(BUILD)/gb/0/main-bench.rel $(GB_RELS) $$rels
 	@$(PYTHON) $(COMMON)/tools/gb_bank_check.py $(BUILD)/gb/nokia3410-bench.map
 	$(MAKEBIN) -Z -yn NOKIA3410 -yc -yt 0x1e -yo 32 -ya 1 $(BUILD)/gb/nokia3410-bench.ihx $@
@@ -393,7 +472,7 @@ bench-report: $(GB_BENCH_ROM) $(BUILD)/gb_run $(BUILD)/si_replay
 	$(PYTHON) tools/bench_report.py $(BUILD)/gb_run $(GB_BENCH_ROM) $(SAMEBOY_BOOT) $(BUILD)/gb/nokia3410-bench.map \
 		$(BENCH)/events.txt $$(ls $(BENCH_DIR)/host/*.pgm | tail -1)
 
-.SECONDARY: $(GB_RELS) $(BUILD)/gb/crt0.rel $(BUILD)/gb/blocks.rel $(BUILD)/gb/native_put.rel $(BUILD)/gb/band.rel $(BUILD)/gb/bcall.rel $(BUILD)/gb/si_fast.rel
+.SECONDARY: $(GB_RELS) $(BUILD)/gb/search.rel $(BUILD)/gb/crt0.rel $(BUILD)/gb/blocks.rel $(BUILD)/gb/native_put.rel $(BUILD)/gb/band.rel $(BUILD)/gb/bcall.rel $(BUILD)/gb/si_fast.rel
 
 gb: $(GB_ROM)
 
@@ -419,6 +498,9 @@ SI_GB_FRAMES := 1300 1600 1900
 # The Instructions' first demo.
 SI_DEMO_GB_KEYS := zssdswwwwwwwwwwussswww
 SI_DEMO_GB_FRAMES := 1400 1500 1600
+# Bantumi: its title, then a game, one pit sown and the phone's answer.
+BT_GB_KEYS := zssdddssswwsww
+BT_GB_FRAMES := 1300 1500 1700
 
 check-gb: $(GB_TEST_ROM) $(BUILD)/gb_run $(BUILD)/frame_gb
 	$(PYTHON) tools/check_gb_run.py $(BUILD)/gb_run $(GB_TEST_ROM) $(SAMEBOY_BOOT) $(BUILD)/frame_gb "$(KEYS)" $(GB_FRAMES)
@@ -426,6 +508,8 @@ check-gb: $(GB_TEST_ROM) $(BUILD)/gb_run $(BUILD)/frame_gb
 	$(PYTHON) tools/check_gb_run.py $(BUILD)/gb_run $(GB_TEST_ROM) $(SAMEBOY_BOOT) $(BUILD)/frame_gb "$(SI_GB_KEYS)" $(SI_GB_FRAMES)
 	@$(MAKE) --no-print-directory $(GB_TEST_ROM) KEYS=$(SI_DEMO_GB_KEYS) >/dev/null
 	$(PYTHON) tools/check_gb_run.py $(BUILD)/gb_run $(GB_TEST_ROM) $(SAMEBOY_BOOT) $(BUILD)/frame_gb "$(SI_DEMO_GB_KEYS)" $(SI_DEMO_GB_FRAMES)
+	@$(MAKE) --no-print-directory $(GB_TEST_ROM) KEYS=$(BT_GB_KEYS) >/dev/null
+	$(PYTHON) tools/check_gb_run.py $(BUILD)/gb_run $(GB_TEST_ROM) $(SAMEBOY_BOOT) $(BUILD)/frame_gb "$(BT_GB_KEYS)" $(BT_GB_FRAMES)
 
 # Headless screenshot of the Game Boy ROM after KEYS, as a PNG.
 shot-gb: $(GB_TEST_ROM) $(BUILD)/gb_run

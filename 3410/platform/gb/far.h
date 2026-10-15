@@ -7,11 +7,14 @@
       in bank 0);
    2  Snake II and its data, the score's digits among it, its title, its
       game-over picture and its High scores page;
-   3  the full-screen menus made at build time and what shows them;
+   3  the full-screen menus made at build time and what shows them, and
+      the Instructions' texts;
    4  their tiles;
    5-8  Space Impact (core/si_int.h), each bank starting with the same copy
       of its data so that it reads the same at the same address whichever
-      of them is mapped.
+      of them is mapped, and 11 its demos; 9 and 10 its pictures' rows;
+   12  Bantumi (common/bantumi/), its data, its search and the graphics
+      library's drawing again.
 
    The main loop runs with bank 1 mapped. A call into bank 2 or 3 goes
    through one of the far_ functions here, which map that bank for the call
