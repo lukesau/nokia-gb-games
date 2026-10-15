@@ -1,11 +1,11 @@
-# Nokia 3410 games for Game Boy
+# Nokia 3410 games for Game Boy and GBA
 
 ![The first screen, the Select game list and Snake II being played on the Game Boy, at the phone's size and in full screen, where Snake II has its bigger board; Space Impact, Bumper, Bantumi and Link5's panels are blank, as they are not here yet](docs/banner.png)
 
 The Nokia 3410 (NHM-2 v5.46) follow-up to the [3310's](../3310/README.md): the 3410's built-in games
 re-implemented in C from a map of the firmware, with their data read from
 your own dump at build time. One portable core runs on the host and as a
-Game Boy ROM (`.gb`); a GBA build is to come.
+Game Boy ROM (`.gb`) and a GBA ROM (`.gba`).
 
 What is there so far:
 
@@ -54,6 +54,12 @@ screen, 39 by 33 cells, with the snake, the food, the creatures and the
 score at the phone's size and speed, the mazes moved out in proportion to
 fill it, and top scores of its own.
 
+The GBA uses the GBA layer the 3310 shares (`../common/platform/gba/`):
+the phone's LCD at 2x, 192 by 130, in the middle of its screen, and the
+full-screen variant's menus at the GBA's size, its Snake II board 29 by 17
+cells shown at 2x over the whole screen. The keys are the same; the
+vibrator drives a rumble cartridge's motor.
+
 | | Menus | Snake II | Space Impact |
 |---|---|---|---|
 | D-pad | up and down | steer (2, 4, 6, 8) | fly (8, 0, *, #) |
@@ -69,8 +75,11 @@ See [docs/plan.md](docs/plan.md) and, in the RE fork,
 
 `make dump` makes the flash image from the Wintesla files below (it needs
 the RE fork, in whose `ports/` directory this repository is kept, or
-`DCT3_RE=` pointing at it; from here it is `../../..`), `make gb` the ROM, `make run-gb` opens it in SameBoy. `make test` runs the host
-checks; `make check-gb` runs the ROM headlessly against the host's frames.
+`DCT3_RE=` pointing at it; from here it is `../../..`), `make gb` the ROM, `make run-gb` opens it in SameBoy; `make gba` and
+`make run-gba` the same for the GBA, in mGBA. `make test` runs the host
+checks; `make check-gb` and `make check-gba` run the ROMs headlessly
+against the host's frames (`check-gba` with mGBA's core, which
+`../common/scripts/setup-mgba.sh` builds).
 `make golden-snake` and `make golden-si` record Snake II and Space Impact
 games in the fork's MAME (`golden-si-menus` the title and High scores,
 `golden-si-demos` the Instructions' demos) and `make check-golden` replays

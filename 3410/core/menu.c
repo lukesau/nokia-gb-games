@@ -1765,6 +1765,22 @@ void menu_draw(void)
         platform_native_blank();
     }
 #endif
+#ifdef NATIVE_PLATFORM_FB
+    /* Made at build time: unpacked into the framebuffer, which marks only
+       the cells that differ, and the cursor drawn over it. */
+    if (mode == VIEW_NATIVE || screen == SCREEN_MAIN) {
+        uint16_t id = menu_native_id();
+
+        if (id != NATIVE_NONE && native_fb_show(id)) {
+            if (screen == SCREEN_MAIN)
+                surround_used = LCD_HAS_SURROUND;
+            if (native_listed())
+                native_cursor(native_selection());
+            board_drawn = 0;
+            return;
+        }
+    }
+#endif
     lcd_clear();
     board_drawn = 0;
     if (mode == VIEW_NATIVE)
