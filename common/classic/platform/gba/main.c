@@ -282,7 +282,7 @@ static void present(void)
 {
     uint8_t all = lcd_zoom_x != shown_x || lcd_zoom_y != shown_y || lcd_zoom_w != shown_w || lcd_zoom_h != shown_h
                   || lcd_zoom_by != shown_by;
-    uint8_t hardware;
+    uint8_t hardware, was_hardware = shown_w && shown_by == LCD_GAME_ZOOM, blank;
     int cx, cy, cover;
 
     shown_x = lcd_zoom_x;
@@ -291,6 +291,15 @@ static void present(void)
     shown_h = lcd_zoom_h;
     shown_by = lcd_zoom_by;
     hardware = shown_w && shown_by == LCD_GAME_ZOOM;
+    /* Into or out of the hardware's magnification the bitmap is drawn
+       for the other scale, over a few frames: the screen is blanked till
+       it and the registers are in place, not shown at the wrong size. */
+    blank = all && (hardware || was_hardware);
+    if (blank) {
+        while (REG_VCOUNT < SCREEN_H)
+            ;
+        REG_DISPCNT = 0x0483; /* mode 3, BG2 on, forced blank */
+    }
     for (cy = 0; cy < LCD_CELLS_Y; cy++) {
         for (cx = 0; cx < LCD_CELLS_X; cx++) {
             uint8_t *dirty = &lcd_dirty[cx + LCD_CELLS_X * cy];
@@ -319,6 +328,8 @@ static void present(void)
     /* After the picture, so that what the hardware magnifies is in place. */
     if (all)
         zoom_hardware(hardware);
+    if (blank)
+        REG_DISPCNT = 0x0403;
 }
 
 static void press_script_key(char key)
