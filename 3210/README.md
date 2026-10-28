@@ -165,7 +165,8 @@ Boy and at 3x on the GBA, where the display hardware does the scaling, and
 share their level and top score with the phone-sized mode. Either way the
 phone's 84 columns are four too many for the screen's width, so the last
 four are left off; Memory's biggest board still fits whole. [`../docs/authenticity.md`](../docs/authenticity.md)
-says where each part of the three ports comes from and where the code's
-structure still differs from the firmware's. See
+says where each part of the three ports comes from, and
+[`../docs/authenticity-audit.md`](../docs/authenticity-audit.md) where the
+code's structure still differs from the firmware's. See
 [`docs/handoff.md`](docs/handoff.md) for the decisions taken, the reference
 material and the work items.

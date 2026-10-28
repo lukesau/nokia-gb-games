@@ -1,4 +1,9 @@
-# Where each part of the ports comes from
+# Authenticity audit: the ledger
+
+The working file behind `authenticity.md`: one row per feature with the
+firmware address it was checked against, the mismatches found, and what to
+trace next. Read `authenticity.md` first; this is for whoever does the next
+audit.
 
 Audited 2026-10-05 across the three ports. The question asked of every
 feature: was it re-implemented from the firmware's code, read from the
@@ -150,7 +155,7 @@ substance. What is not:
 | Collisions, damage, scoring | traced | `0x259d30`, `0x259a60`..`0x259cfe`, `0x2593a4` | shots on ordinary enemies, +5 and +10 |
 | Bonuses, score cap 31500 | traced | `si_award_2592b0` | unclear |
 | Lives, continue screen (5 at 800 ms) | traced | `0x258114`, `0x257ce0`; 800 ms never measured | no |
-| Bosses of levels 1-7 and the final boss | traced | `0x258b0c`, `0x258882`, `0x258a04`, `0x258808`, `0x258400`, `0x2588c8`, `0x258c68`; the map only summarises them | no (host bot only) |
+| Bosses of levels 1-7 and the final boss | traced | `0x258b0c`, `0x258882`, `0x258a04`, `0x258808`, `0x258400`, `0x2588c8`, `0x258c68`; the map only summarizes them | no (host bot only) |
 | Boss explosions, level exit, end after level 8 | traced | `0x2593a4`, `0x2596a0`, `0x25a200` | no |
 | Pause: the port resumes exactly, without the 1.5 s shield | port | `si_resume_2581f8` traced, not ported | no |
 | Top score starts at 0 | port | the phone's 4075 is left over in the PMM dump | the 2 failing menus |
@@ -193,7 +198,7 @@ substance. What is not:
 | New game, slide in, pits, digits, cursor, sowing, captures, extra turn, end | traced + measured | `bantumi_new_game_2b1c10`, `bantumi_set_pit_2b1764`, `bantumi_pick_2b1ad0`, `bantumi_turn_end_2b1898` | frames |
 | Hand paths and drawing | traced | `bantumi_hand_path_2b1a04`, `bantumi_draw_hand_2b1520` | frames |
 | Hand widths 12 and 11 | measured | the RAM descriptors were not read | frames |
-| The phone's search: depth, 100 steps a tick, move order, its two mistakes, the hint | traced + measured | `0x2dd3bc`, `0x2dd5ac`, `0x2dd438`, `0x2dd28e`; 112 of 112 searches modelled | frames (level 4 never run) |
+| The phone's search: depth, 100 steps a tick, move order, its two mistakes, the hint | traced + measured | `0x2dd3bc`, `0x2dd5ac`, `0x2dd438`, `0x2dd28e`; 112 of 112 searches modeled | frames (level 4 never run) |
 | The search in Game Boy assembly | port | `common/bantumi/search.s` | only against the host |
 | Winner's store blinking | traced | | frames |
 | Loser's store | port, drawn steady | the phone blinks it through mode 5 | — |

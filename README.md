@@ -55,9 +55,10 @@ The 3310 and 3410 followed the same way.
   built on, shared by the three ports (`make setup`).
 - `docs/combined-rom.md`: the plan for one ROM holding all three phones,
   picked on the first screen.
-- `docs/authenticity.md`: where each part of the ports comes from: traced
-  from the firmware's code, read from its data, measured in MAME, or the
-  port's own.
+- `docs/authenticity.md`: how faithful each port is, game by game: what is
+  from the firmware's code, what from its data, what from watching the
+  phone in MAME, and what is the port's own. `docs/authenticity-audit.md`
+  is the ledger behind it, with the addresses.
 - `Makefile`: runs a target in every port: `make gb`, `make gba`, `make
   test`, `make check-golden`, `make check-gb`, `make cards` and so on;
   `make -C 3310 <target>` runs one port's.
