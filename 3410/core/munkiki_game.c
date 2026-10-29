@@ -433,42 +433,60 @@ static void level_load(uint8_t level)
     saved_deaths = mk.deaths;
 }
 
-/* d's construction: a new game, or the one put away. */
+/* d's construction: a new game, or the one put away (d.ay: Munkiki at
+   the level's start, the level as it was). */
 static void game_new(uint8_t fresh)
 {
-    mkv.counter = 0;
-    mk.demo = 0;
-    mk.demo_key = -1;
-    if (fresh) {
-        mk_lives_reset();
-        mk.lives = 3;
-        mk.keys = 0;
-        mk.score = 0;
-        level_load(level_reached);
-    } else if (mk.lives < 0 || part == PART_OVER) {
-        /* After the game ended, as the JAR saved it when the level began. */
-        mk.lives = saved_lives;
-        mk.score = saved_score;
-        mk.keys = saved_keys;
-        mk.deaths = saved_deaths;
-        level_load(saved_level);
+    uint8_t over = (uint8_t)(mk.lives < 0 || part == PART_OVER);
+
+    if (fresh || over) {
+        memset(&mk, 0, sizeof mk);
+        mk.demo_key = -1;
+        if (fresh) {
+            mk_lives_reset();
+            mk.lives = 3;
+            mk.keys = 0;
+            mk.score = 0;
+            level_load(level_reached);
+        } else {
+            /* After the game ended, as the JAR saved it when the level began. */
+            mk.lives = saved_lives;
+            mk.score = saved_score;
+            mk.keys = saved_keys;
+            mk.deaths = saved_deaths;
+            level_load(saved_level);
+        }
     } else {
-        /* The game as it was left, with Munkiki sliding in again. The JAR
-           reloads it from its record, which snaps moving blocks to their
-           cells; here it goes on as it was. */
+        /* The JAR reloads the level from its record, which snaps moving
+           blocks to their cells and forgets the movers; here the level
+           goes on as it was. */
+        mk.land = 0;
+        mk.ride = 0;
+        mk.riding = 0;
+        mk.idle = 0;
+        mk.demo = 0;
+        mk.demo_key = -1;
+        mk.look_pitch = mk.look_yaw = 0;
+        mk.ended = 0;
+        mk.vz = mk.vx = mk.speed = mk.vy = mk.vyaw = 0;
+        mk.left = 0;
+        mk.px = (int32_t)mk.start_x * 65536L;
+        mk.py = (int32_t)mk.start_y * 65536L;
+        mk.pz = (int32_t)mk.start_z * 65536L;
+        mk.facing = (int32_t)mk.start_facing * 65536L;
         mk.phase = -1;
         mkv.dy = -64;
         mk.frame = 0;
         mk.action = 17;
         mk.anim = 15;
         mk.left = munkiki_anim_table[15].count;
-        mk.vz = mk.vx = mk.speed = mk.vy = mk.vyaw = 0;
     }
     game_exists = 1;
 }
 
 static void list_open(uint8_t which);
 static void part_open(uint8_t which);
+static void scene_render(void);
 
 /* KKM.p: a screen. */
 static void screen_open(int8_t which)
@@ -634,9 +652,12 @@ static void part_open(uint8_t which)
     }
 }
 
-/* KKM.r: one of the phone's pages. */
+/* KKM.r: one of the phone's pages. Opened over the game, the game is
+   painted once more first (KKM.s has the canvas repaint). */
 static void list_open(uint8_t which)
 {
+    if (list == LIST_NONE && game_exists && (part == PART_PLAY || part == PART_DONE))
+        scene_render();
     list = which;
     selection = list_top = 0;
     switch (which) {
@@ -716,8 +737,6 @@ static void scores_update(void)
     }
 }
 
-static void scene_render(void);
-
 /* KKM.m: a tick. */
 static void game_tick(void)
 {
@@ -781,7 +800,6 @@ static void game_tick(void)
             if (mk_any_pressed()) {
                 part_open(PART_PLAY);
                 mk_world_tick();
-                scene_render();
             }
             break;
         case PART_PLAY:
@@ -792,10 +810,8 @@ static void game_tick(void)
                 life_lost();
                 break;
             }
-            if (mk.ended == 0 || mk.level >= 90) {
-                scene_render();
+            if (mk.ended == 0 || mk.level >= 90)
                 break;
-            }
             counter = 0;
             part_open(PART_DONE);
             bonus_key = mk.ended == MK_THING_KEY ? 500 : 0;
@@ -821,7 +837,6 @@ static void game_tick(void)
             }
             mk.anim = 11;
             mk_world_tick();
-            scene_render();
             if (++counter > n)
                 part_open(PART_BONUS);
             break;
@@ -882,7 +897,9 @@ static void game_tick(void)
 /* The screens' pictures. */
 static void hud_draw(void);
 
-/* The game's picture is made as the JAR paints it, after every tick. */
+/* The game's picture is made as the JAR paints it, after every tick its
+   canvas is shown with a game under way: even under the High scores page,
+   whose paint then clears it (so the world turns on there too). */
 static void scene_render(void)
 {
     mk_scene_draw();
@@ -1250,7 +1267,12 @@ uint8_t munkiki_tick(void) MK_FAR
     uint8_t what = MK_DRAW;
 
     game_tick();
-    /* KKM.j: * held while the game paints opens the pause list. */
+    /* b.e: keys that came up are forgotten before the paint, which draws
+       the game whenever it is on the canvas (b.paint). */
+    mk_pressed &= (uint16_t)~mk_released;
+    if (list == LIST_NONE && game_exists && (part == PART_PLAY || part == PART_DONE))
+        scene_render();
+    /* KKM.j: * still held while the game paints opens the pause list. */
     if (screen == SCREEN_GAME && part == PART_PLAY && list == LIST_NONE && (mk_pressed & MK_BIT_STAR)) {
         mk_pressed &= (uint16_t)~MK_BIT_STAR;
         list_open(LIST_PAUSE);
@@ -1259,8 +1281,6 @@ uint8_t munkiki_tick(void) MK_FAR
         record_changed = 0;
         what |= MK_RECORD;
     }
-    /* b.e: keys that came up are forgotten after the tick saw them. */
-    mk_pressed &= (uint16_t)~mk_released;
     return what;
 }
 
@@ -1296,7 +1316,7 @@ int munkiki_state_text(char *out, int size)
                   list, part, counter, help_page, bonus_time, bonus_key, bonus_warp, bonus_last, top_score, second_score,
                   level_reached, can_continue);
     n += snprintf(out + n, size - n, "C bt=%d bs=%d br=%d bh=%d bg=%d bf=%d be=%d bc=%d a7=%d a6=%d a5=%d a4=%d\n",
-                  mkv.counter, mkv.wobble, mkv.show, (int8_t)mkv.sprite, mkv.dx, mkv.dy, mk.block_count, mk.thing_count,
+                  (int8_t)mkv.counter, mkv.wobble, mkv.show, (int8_t)mkv.sprite, mkv.dx, mkv.dy, mk.block_count, mk.thing_count,
                   mkv.sparkle, mkv.splash, mkv.curtain, mkv.curtain_kind);
     if (game_exists) {
         n += snprintf(out + n, size - n,
