@@ -249,9 +249,10 @@ assumed (none is set in the data).
 
 **Not checked.** The picture against the phone beyond what is listed:
 the 3D frames are compared by eye. The phone's rendering of the tones
-was not heard (MAME's DSP does not play them). The GB keeps the phone's
-pace by showing fewer pictures when a tick's picture takes longer than
-the tick.
+was not heard (MAME's DSP does not play them). The Game Boy keeps the
+phone's pace by showing fewer pictures when a tick's picture takes longer
+than the tick, which it does: about three a second at the first level's
+start.
 
 ### The pages around the games
 

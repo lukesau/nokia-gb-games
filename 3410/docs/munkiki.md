@@ -101,4 +101,10 @@ phone itself draws fewer frames than that, being slower.
 - The warp's texture is drawn once over its square; the JAR's texture
   coordinates run 0 to 4, which may tile it.
 - The Game Boy keeps the phone's pace by drawing fewer pictures of the
-  3D view when a tick's picture takes longer than a tick.
+  3D view when a tick's picture takes longer than a tick: a picture of
+  the first level's start takes it about twenty frames, so it shows some
+  three a second there and fewer where more blocks are in view, while
+  the game's ticks go on at ten a second. Its rasterizer keeps to 8-bit
+  products and 16-bit divisions, with the row filler, the multiply, the
+  divider and the box vertices in assembly (`core/munkiki_3d.c`); SDCC's
+  own 32-bit division costs some 17000 cycles there.
