@@ -18,7 +18,10 @@
      writes:LOW:HIGH:COUNT  print the next COUNT writes to the hexadecimal
                   address range, and the instruction that made each
      hits:N:ADDR  run N screen frames and print how often the instruction
-                  at hexadecimal ADDR was reached
+                  at hexadecimal ADDR was reached; ADDR@BANK counts it in
+                  that ROM bank only
+     spmin:N      run N screen frames and print the lowest the stack
+                  pointer went
      times:N:ADDR,ADDR...  run N screen frames and print the cycle at
                   which each of the instructions at those addresses is
                   reached; one written !ADDR ends the step when reached
@@ -150,7 +153,7 @@ int main(int argc, char **argv)
                 printf(" %02x", GB_read_memory(gb, (uint16_t)(addr + k)));
             printf("\n");
         } else if (strncmp(step, "prof:", 5) == 0) {
-            static uint32_t spent[16][0x10000];
+            static uint32_t spent[32][0x10000];
             char *colon = NULL;
             long frames = strtol(step + 5, &colon, 10);
             uint64_t left = (uint64_t)frames * 70224 * 2; /* 8 MHz units in a frame */
@@ -168,10 +171,10 @@ int main(int argc, char **argv)
                 pc = GB_get_registers(gb)->pc;
                 GB_get_direct_access(gb, GB_DIRECT_ACCESS_ROM, NULL, &mapped);
                 cycles = GB_run(gb);
-                spent[mapped & 15][pc] += cycles;
+                spent[mapped & 31][pc] += cycles;
                 left = left > cycles ? left - cycles : 0;
             }
-            for (bank = 0; bank < 16; bank++)
+            for (bank = 0; bank < 32; bank++)
                 for (pc = 0; pc < 0x10000; pc++)
                     if (spent[bank][pc])
                         fprintf(out, "%u %04x %u\n", bank, pc, spent[bank][pc]);
@@ -184,20 +187,42 @@ int main(int argc, char **argv)
         } else if (strncmp(step, "hits:", 5) == 0) {
             /* hits:N:ADDR runs N frames and prints how often the instruction
                at hexadecimal ADDR was reached. */
-            char *colon = NULL;
+            char *colon = NULL, *at = NULL;
             long frames = strtol(step + 5, &colon, 10);
-            unsigned addr = colon && *colon ? (unsigned)strtoul(colon + 1, NULL, 16) : 0, hits = 0;
+            unsigned addr = colon && *colon ? (unsigned)strtoul(colon + 1, &at, 16) : 0, hits = 0;
+            int bank = at && *at == '@' ? (int)strtol(at + 1, NULL, 10) : -1; /* ADDR@BANK: in that ROM bank only */
             uint64_t left = (uint64_t)frames * 70224 * 2;
 
             while (left > 0) {
                 unsigned cycles;
+                uint16_t mapped = 0;
 
-                if (GB_get_registers(gb)->pc == addr)
-                    hits++;
+                if (GB_get_registers(gb)->pc == addr) {
+                    if (bank >= 0)
+                        GB_get_direct_access(gb, GB_DIRECT_ACCESS_ROM, NULL, &mapped);
+                    if (bank < 0 || mapped == bank)
+                        hits++;
+                }
                 cycles = GB_run(gb);
                 left = left > cycles ? left - cycles : 0;
             }
             printf("%04x: reached %u times in %ld frames\n", addr, hits, frames);
+        } else if (strncmp(step, "spmin:", 6) == 0) {
+            /* spmin:N runs N frames and prints the lowest the stack pointer
+               went. */
+            long frames = strtol(step + 6, NULL, 10);
+            uint64_t left = (uint64_t)frames * 70224 * 2;
+            unsigned low = 0xffff;
+
+            while (left > 0) {
+                unsigned cycles, sp = GB_get_registers(gb)->sp;
+
+                if (sp < low)
+                    low = sp;
+                cycles = GB_run(gb);
+                left = left > cycles ? left - cycles : 0;
+            }
+            printf("stack pointer's lowest: %04x in %ld frames\n", low, frames);
         } else if (strncmp(step, "times:", 6) == 0) {
             /* times:N:ADDR,ADDR... runs N frames and prints the cycle,
                counted from the step's start, at which each of the
