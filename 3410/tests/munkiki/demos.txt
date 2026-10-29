@@ -1,0 +1,27 @@
+# The Instructions: every text page then its demo, left to run out (50 ticks each).
+tick 3
+key fire
+tick 2
+# Instructions is entry 2 (no Continue yet)
+select 2
+tick 1
+more
+tick 1
+more
+tick 1
+more
+tick 60
+more
+tick 60
+more
+tick 60
+more
+tick 60
+more
+tick 60
+more
+tick 60
+more
+tick 2
+more
+tick 2

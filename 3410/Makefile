@@ -33,6 +33,7 @@ GB_FB := -DLCD_FB_WIDTH=160 -DLCD_FB_HEIGHT=144 -DLCD_PHONE_X=32 -DLCD_PHONE_Y=4
 GB_CFLAGS = -msm83 --opt-code-speed $(GB_FB) -DSNAKE2_STATE_AT=0xa100 -DSNAKE2_STATE_END=0xc000 \
 	-DSI_BANKED -DSI_PLATFORM_ROWS -DSI_ROWS_FAR=9 -DSI_ROWS_AT=0xb300 -DSI_ROWS_END=0xc000 -DSI_ROWS_BLOCK=gb_block_rows -DSI_ROWS_PUT=gb_rows_put -DSI_ROWS_FILL=gb_fill -DSI_ROWS_MADE=gb_rows_made -DSI_ROWS_TERRAIN -DSI_PLATFORM_FIND_HIT -DSI_PICS_AT=0xa100 -DSI_STATE_AT=0xa900 -DSI_STATE_END=0xb300 -DLCD_PLATFORM_COLUMNS -DSPRITE_PLATFORM_BAND -DSPRITE_PLATFORM_PRESENT -DNATIVE_PLATFORM_TILES -DNATIVE_PLATFORM_PALETTE \
 	-DMENU_TEXT_FAR -DBANTUMI_BANKED -DBANTUMI_PLATFORM_SEARCH -DBANTUMI_STATE_AT=0xa900 -DBANTUMI_STATE_END=0xab00 -DBANTUMI_SAVED_AT=0xab00 -DBANTUMI_SAVED_END=0xac00 \
+	-DMUNKIKI_BANKED -DMK_STATE_AT=0xa100 -DMK_FRAME_SHARED -DMUNKIKI_SOUND_BANK=$(GB_MUNKIKI_BANK) \
 	-Icore -I$(COMMON)/core -I$(COMMON)/bantumi -Iplatform/gb -I$(COMMON)/platform/gb -I$(ASSETS)
 # The SameBoy clone scripts/setup-sameboy.sh makes: its boot ROM, and its
 # core as a library (`make -C $(SAMEBOY) lib`) for tools/gb_run.
@@ -61,7 +62,8 @@ COMMON := ../common
 ASSETS := $(BUILD)/assets
 ASSET_SRC := $(ASSETS)/game_assets.c $(ASSETS)/snake2_data.c $(ASSETS)/game_tables.c $(ASSETS)/si_data.c \
 	$(ASSETS)/si_rows_a.c $(ASSETS)/si_rows_b.c $(ASSETS)/si_rows_index.c $(ASSETS)/bantumi_data.c $(ASSETS)/game_apart.c \
-	$(ASSETS)/munkiki_data.c $(ASSETS)/munkiki_sheet.c
+	$(ASSETS)/munkiki_data.c $(ASSETS)/munkiki_sounds.c $(ASSETS)/munkiki_text.c $(ASSETS)/munkiki_gfx.c \
+	$(ASSETS)/munkiki_pics.c $(ASSETS)/munkiki_sheet.c
 # Munkiki's Castles' JAR, which the PMM holds (README.md).
 JAR ?= roms/munkikis_castles.jar
 CORE_SRC := $(wildcard core/*.c) $(wildcard $(COMMON)/core/*.c) $(COMMON)/bantumi/bantumi.c
@@ -93,6 +95,19 @@ GB_BANK11 := core/si_demo.c
 # the pictures where they are.
 GB_BANTUMI_BANK := 12
 GB_BANK12 := $(COMMON)/bantumi/bantumi.c core/bantumi_play.c $(ASSETS)/bantumi_data.c
+# Munkiki's Castles, in six banks, each with the data it reads (a bank
+# reads no other's, core/munkiki_blit.h): the world with the levels; the
+# rasterizer with the geometry and textures; Munkiki's frames with what
+# draws them; the game's flow with the sounds; its pages with the text
+# and the pages' pictures; the scene with the effects' pictures.
+GB_MUNKIKI_BANKS := 13 14 15 16 17 18
+GB_MUNKIKI_BANK := 16
+GB_BANK13 := core/munkiki.c $(ASSETS)/munkiki_data.c
+GB_BANK14 := core/munkiki_3d.c $(ASSETS)/munkiki_gfx.c
+GB_BANK15 := core/munkiki_sprite.c $(ASSETS)/munkiki_sheet.c
+GB_BANK16 := core/munkiki_game.c $(ASSETS)/munkiki_sounds.c
+GB_BANK17 := core/munkiki_pages.c $(ASSETS)/munkiki_text.c
+GB_BANK18 := core/munkiki_scene.c $(ASSETS)/munkiki_pics.c
 # The pictures as the Game Boy draws them (core/si_rows.h): what draws
 # them in the first bank, their rows in two of their own.
 GB_ROWS_BANK := 9
@@ -101,7 +116,8 @@ GB_RELS := $(call gb_rels,0,$(filter-out platform/gb/main.c,$(GB_BANK0))) $(call
 	$(call gb_rels,2,$(GB_BANK2)) $(call gb_rels,3,$(GB_BANK3)) $(call gb_rels,4,$(GB_BANK4)) \
 	$(BUILD)/gb/$(GB_ROWS_BANK)/si_rows_a.rel $(BUILD)/gb/$(GB_ROWS_BANK)/si_rows_b.rel $(BUILD)/gb/4/si_rows.rel \
 	$(foreach n,$(GB_SI_BANKS),$(BUILD)/gb/$(n)/si_data.rel $(call gb_rels,$(n),$(GB_BANK$(n)))) \
-	$(call gb_rels,12,$(GB_BANK12)) $(BUILD)/gb/12/bantumi_pic.rel
+	$(call gb_rels,12,$(GB_BANK12)) $(BUILD)/gb/12/bantumi_pic.rel \
+	$(foreach n,$(GB_MUNKIKI_BANKS),$(call gb_rels,$(n),$(GB_BANK$(n))))
 
 GBA_ROM := $(BUILD)/nokia3410.gba
 GBA_TEST_ROM := $(BUILD)/nokia3410-keys.gba
@@ -116,7 +132,7 @@ KEYS ?= sssss
 # The game without the menus, for tools that drive it directly.
 GAME_SRC := $(filter-out core/menu.c core/menu_header.c $(COMMON)/core/font.c,$(CORE_SRC))
 
-.PHONY: help dump install-roms assets test frames golden-snake golden-si golden-si-menus golden-si-demos golden-bantumi golden-bantumi-demos check-golden check-menus gb check-gb bench-gb bench-report shot-gb run-gb gba check-gba shot-gba run-gba cards clean
+.PHONY: help dump install-roms assets test frames golden-snake golden-si golden-si-menus golden-si-demos golden-bantumi golden-bantumi-demos check-golden check-menus check-munkiki gb check-gb bench-gb bench-report shot-gb run-gb gba check-gba shot-gba run-gba cards clean
 
 help:
 	@echo "make dump      rebuild $(DUMP) from the Wintesla files in FLASH_FILES=$(FLASH_FILES)"
@@ -127,6 +143,7 @@ help:
 	@echo "make golden-bantumi record Bantumi games in MAME into golden/bantumi-*/"
 	@echo "make check-golden replay the recorded runs through the core and compare every frame"
 	@echo "make check-menus compare the menu pages with the phone's in golden/menus/"
+	@echo "make check-munkiki run tests/munkiki/'s scripts through the JAR and the port and compare"
 	@echo "make gb        build $(GB_ROM)"
 	@echo "make check-gb  run the Game Boy ROM headlessly and compare its screen with the host's"
 	@echo "make shot-gb   run the Game Boy ROM headlessly and write $(BUILD)/nokia3410-gb.png"
@@ -169,7 +186,8 @@ $(ASSETS)/snake2_data.c $(ASSETS)/game_tables.c $(ASSETS)/si_data.c $(ASSETS)/si
 $(ASSETS)/munkiki_data.c: tools/extract_munkiki.py
 	$(PYTHON) tools/extract_munkiki.py "$(JAR)" $(ASSETS)
 
-$(ASSETS)/munkiki_sheet.c $(ASSETS)/munkiki_data.h: $(ASSETS)/munkiki_data.c
+$(ASSETS)/munkiki_sounds.c $(ASSETS)/munkiki_text.c $(ASSETS)/munkiki_gfx.c $(ASSETS)/munkiki_pics.c \
+	$(ASSETS)/munkiki_sheet.c $(ASSETS)/munkiki_data.h: $(ASSETS)/munkiki_data.c
 
 $(BUILD)/test_core: tests/test_core.c $(COMMON)/core/lcd.c core/rand.c core/sprite.c $(CORE_HDR)
 	@mkdir -p $(BUILD)
@@ -197,8 +215,9 @@ $(BUILD)/replay: platform/host/replay_main.c $(COMMON)/platform/host/pgm.c $(GAM
 
 # Munkiki's Castles alone: the game's files, the LCD, the fonts it draws
 # with and the sounds it names, with the replay's own sound hooks.
-MUNKIKI_SRC := core/munkiki.c core/munkiki_3d.c core/munkiki_sprite.c core/munkiki_game.c $(COMMON)/core/lcd.c $(COMMON)/core/font.c \
-	$(ASSETS)/game_assets.c $(ASSETS)/game_apart.c $(ASSETS)/munkiki_data.c $(ASSETS)/munkiki_sheet.c
+MUNKIKI_SRC := core/munkiki.c core/munkiki_3d.c core/munkiki_scene.c core/munkiki_sprite.c core/munkiki_game.c core/munkiki_pages.c \
+	$(COMMON)/core/lcd.c $(COMMON)/core/font.c $(ASSETS)/game_assets.c $(ASSETS)/game_apart.c \
+	$(ASSETS)/munkiki_data.c $(ASSETS)/munkiki_sounds.c $(ASSETS)/munkiki_text.c $(ASSETS)/munkiki_gfx.c $(ASSETS)/munkiki_pics.c $(ASSETS)/munkiki_sheet.c
 $(BUILD)/munkiki_replay: platform/host/munkiki_replay_main.c $(COMMON)/platform/host/pgm.c $(MUNKIKI_SRC) $(CORE_HDR)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ platform/host/munkiki_replay_main.c $(COMMON)/platform/host/pgm.c $(MUNKIKI_SRC)
 
@@ -351,6 +370,30 @@ check-golden: $(BUILD)/replay $(BUILD)/si_replay $(BUILD)/bantumi_replay
 		else echo "no $$dir/events.txt: run make golden-bantumi; skipped"; fi; \
 	done
 
+# Munkiki's Castles against the JAR itself: each script in tests/munkiki/
+# is run through the JAR's classes in tools/munkiki_harness (a JVM and the
+# JAR unzipped in build/munkiki_jar) and through the port, and the state
+# they log after every tick must agree (tools/munkiki_compare.py).
+MUNKIKI_SCRIPTS := $(wildcard tests/munkiki/*.txt)
+
+$(BUILD)/munkiki_jar/.unzipped: $(JAR)
+	rm -rf $(BUILD)/munkiki_jar && mkdir -p $(BUILD)/munkiki_jar
+	unzip -q "$(JAR)" -d $(BUILD)/munkiki_jar
+	touch $@
+
+$(ASSETS)/fontmetrics.txt: tools/munkiki_fontmetrics.py $(ASSETS)/game_assets.c
+	$(PYTHON) tools/munkiki_fontmetrics.py $(ASSETS) $@
+
+check-munkiki: $(BUILD)/munkiki_replay $(BUILD)/munkiki_jar/.unzipped $(ASSETS)/fontmetrics.txt
+	@command -v java >/dev/null || { echo "no java: the JAR cannot be run; skipped"; exit 0; }
+	@for script in $(MUNKIKI_SCRIPTS); do \
+		out=$$(mktemp -d) && \
+		JARDIR=$(abspath $(BUILD)/munkiki_jar) CLASSES=$(abspath $(BUILD)/munkiki_harness) FONTMETRICS=$(abspath $(ASSETS)/fontmetrics.txt) \
+			tools/munkiki_harness/run.sh $$script > $$out/jar.txt 2>$$out/jar.err || { cat $$out/jar.err; exit 1; }; \
+		$(BUILD)/munkiki_replay $$script $$out > $$out/port.txt || exit 1; \
+		echo "$$script:"; $(PYTHON) tools/munkiki_compare.py $$out/port.txt $$out/jar.txt || exit 1; \
+	done
+
 # The menu pages against frames of the phone's own, captured in MAME and
 # named after the host frame they must equal. Derived from the firmware, so
 # the directory is ignored; skipped when empty.
@@ -375,9 +418,14 @@ $(BUILD)/gb/0/%.rel: %.c $(CORE_HDR) $(ASSET_SRC)
 	@mkdir -p $(BUILD)/gb/0
 	$(SDCC) $(GB_CFLAGS) $(GB_EXTRA) -c $< -o $@
 
+# menu.c and menu_header.c hold a banked function each for Munkiki's
+# Castles (the fonts, core/munkiki_int.h), so they are told their banks.
+$(BUILD)/gb/1/menu.rel: GB_BANK_OF := -bo 1
+$(BUILD)/gb/3/menu_header.rel: GB_BANK_OF := -bo 3
+
 $(BUILD)/gb/1/%.rel: %.c $(CORE_HDR) $(ASSET_SRC)
 	@mkdir -p $(BUILD)/gb/1
-	$(SDCC) $(GB_CFLAGS) $(GB_EXTRA) --codeseg CODE_1 -c $< -o $@
+	$(SDCC) $(GB_CFLAGS) $(GB_EXTRA) $(GB_BANK_OF) --codeseg CODE_1 -c $< -o $@
 
 $(BUILD)/gb/2/%.rel: %.c $(CORE_HDR) $(ASSET_SRC)
 	@mkdir -p $(BUILD)/gb/2
@@ -393,7 +441,7 @@ $(BUILD)/gb/3/native_data.rel: GB_PART := -DNATIVE_PART_SCREENS
 
 $(BUILD)/gb/3/%.rel: %.c $(CORE_HDR) $(ASSET_SRC) $(COMMON)/platform/gb/native_gb.h
 	@mkdir -p $(BUILD)/gb/3
-	$(SDCC) $(GB_CFLAGS) $(GB_PART) --codeseg CODE_3 -c $< -o $@
+	$(SDCC) $(GB_CFLAGS) $(GB_PART) $(GB_BANK_OF) --codeseg CODE_3 -c $< -o $@
 
 $(BUILD)/gb/4/%.rel: %.c
 	@mkdir -p $(BUILD)/gb/4
@@ -445,6 +493,15 @@ $(BUILD)/gb/12/bantumi_pic.rel: core/si_pic.c $(CORE_HDR)
 	@mkdir -p $(@D)
 	$(SDCC) $(GB_CFLAGS) -DSI_PIC_RENDER_ONLY -Dsi_pic_render=bantumi_pic_render --codeseg CODE_12 -bo 12 -c $< -o $@
 
+# Munkiki's Castles' banks: its functions are banked (-bo), called from
+# the menus and between the banks through bcall.s.
+define gb_mk_bank
+$(BUILD)/gb/$(1)/%.rel: %.c $(CORE_HDR) $(ASSET_SRC)
+	@mkdir -p $(BUILD)/gb/$(1)
+	$(SDCC) $(GB_CFLAGS) --codeseg CODE_$(1) -bo $(1) -c $$< -o $$@
+endef
+$(foreach n,$(GB_MUNKIKI_BANKS),$(eval $(call gb_mk_bank,$(n))))
+
 # Bantumi's search, in its bank.
 $(BUILD)/gb/search.rel: $(COMMON)/bantumi/search.s
 	@mkdir -p $(BUILD)/gb
@@ -459,20 +516,21 @@ $(BUILD)/gb/%.rel: $(COMMON)/platform/gb/%.s
 	@mkdir -p $(BUILD)/gb
 	$(SDAS) -o $@ $<
 
-# MBC5 with its rumble pin and battery-backed RAM, sixteen ROM banks (13
-# used) and 8 KiB of RAM. The linker does not mind the first bank running
-# over into the second, so its end is checked here.
+# MBC5 with its rumble pin and battery-backed RAM, thirty-two ROM banks
+# (19 used) and 8 KiB of RAM. The linker does not mind the first bank
+# running over into the second, so its end is checked here.
 $(BUILD)/nokia3410%gb: $(BUILD)/gb/crt0.rel $(BUILD)/gb/search.rel $(BUILD)/gb/blocks.rel $(BUILD)/gb/native_put.rel $(BUILD)/gb/band.rel $(BUILD)/gb/bcall.rel $(BUILD)/gb/si_fast.rel $(BUILD)/gb/0/main%rel $(GB_RELS)
 	$(SDCC) -msm83 --no-std-crt0 -Wl-b_CODE_1=0x14000 -Wl-b_CODE_2=0x24000 -Wl-b_CODE_3=0x34000 -Wl-b_CODE_4=0x44000 \
 		$(foreach n,$(GB_SI_BANKS),-Wl-b_CODE_$(n)=0x$(shell printf %X $(n))4000) -Wl-b_CODE_9=0x94000 -Wl-b_CODE_10=0xA4000 -Wl-b_CODE_12=0xC4000 \
+		$(foreach n,$(GB_MUNKIKI_BANKS),-Wl-b_CODE_$(n)=0x$(shell printf %X $(n))4000) \
 		-o $(BUILD)/gb/$(basename $(notdir $@)).ihx $^
 	@$(PYTHON) $(COMMON)/tools/gb_bank_check.py $(BUILD)/gb/$(basename $(notdir $@)).map
 	@$(PYTHON) tools/gb_mirror_check.py $(BUILD)/gb/$(basename $(notdir $@)).map
-	$(MAKEBIN) -Z -yn NOKIA3410 -yc -yt 0x1e -yo 16 -ya 1 $(BUILD)/gb/$(basename $(notdir $@)).ihx $@
+	$(MAKEBIN) -Z -yn NOKIA3410 -yc -yt 0x1e -yo 32 -ya 1 $(BUILD)/gb/$(basename $(notdir $@)).ihx $@
 
 # A benchmark ROM: a recorded game (BENCH, one of golden/si-*) played as
 # fast as the Game Boy goes, drawing whenever the game asks, its events in
-# banks 16 on; make bench-report times every step of it in SameBoy.
+# banks 19 on; make bench-report times every step of it in SameBoy.
 BENCH ?= golden/si-d
 BENCH_DIR := $(BUILD)/bench
 GB_BENCH_ROM := $(BUILD)/nokia3410-bench.gb
@@ -489,12 +547,13 @@ $(BUILD)/gb/0/main-bench.rel: platform/gb/main.c $(CORE_HDR) $(ASSET_SRC) $(BENC
 
 $(GB_BENCH_ROM): $(GB_BASE_RELS) $(BUILD)/gb/0/main-bench.rel $(BENCH_DIR)/si_bench.h
 	@set -e; rels=; banks=; for c in $(BENCH_DIR)/si_bench_*.c; do \
-		n=$${c##*_}; n=$${n%.c}; b=$$((16 + n)); \
+		n=$${c##*_}; n=$${n%.c}; b=$$((19 + n)); \
 		$(SDCC) $(GB_CFLAGS) -I$(BENCH_DIR) --codeseg CODE_$$b -c $$c -o $(BENCH_DIR)/si_bench_$$n.rel; \
 		rels="$$rels $(BENCH_DIR)/si_bench_$$n.rel"; banks="$$banks -Wl-b_CODE_$$b=0x$$(printf %X $$b)4000"; \
 	done; \
 	$(SDCC) -msm83 --no-std-crt0 -Wl-b_CODE_1=0x14000 -Wl-b_CODE_2=0x24000 -Wl-b_CODE_3=0x34000 -Wl-b_CODE_4=0x44000 \
-		$(foreach n,$(GB_SI_BANKS),-Wl-b_CODE_$(n)=0x$(shell printf %X $(n))4000) -Wl-b_CODE_9=0x94000 -Wl-b_CODE_10=0xA4000 -Wl-b_CODE_12=0xC4000 $$banks \
+		$(foreach n,$(GB_SI_BANKS),-Wl-b_CODE_$(n)=0x$(shell printf %X $(n))4000) -Wl-b_CODE_9=0x94000 -Wl-b_CODE_10=0xA4000 -Wl-b_CODE_12=0xC4000 \
+		$(foreach n,$(GB_MUNKIKI_BANKS),-Wl-b_CODE_$(n)=0x$(shell printf %X $(n))4000) $$banks \
 		-o $(BUILD)/gb/nokia3410-bench.ihx $(BUILD)/gb/crt0.rel $(BUILD)/gb/search.rel $(BUILD)/gb/blocks.rel $(BUILD)/gb/native_put.rel \
 		$(BUILD)/gb/band.rel $(BUILD)/gb/bcall.rel $(BUILD)/gb/si_fast.rel $(BUILD)/gb/0/main-bench.rel $(GB_RELS) $$rels
 	@$(PYTHON) $(COMMON)/tools/gb_bank_check.py $(BUILD)/gb/nokia3410-bench.map

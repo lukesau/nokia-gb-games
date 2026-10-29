@@ -1,0 +1,38 @@
+# Munkiki's Castles sample script
+# splash
+tick 3
+key fire
+tick 2
+# main menu (no KKM store yet, so index 0 = New game) -> p(2)/q(0)
+select 0
+tick 2
+# level map intro (ab 0) -> level progress map (ab 5)
+key 5
+tick 3
+# -> level text (ab 1)
+key 5
+tick 3
+# -> play (ab 2)
+key 5
+tick 3
+# in the game
+key 2
+tick 12
+key 2
+tick 12
+key 6
+tick 8
+key 2
+tick 12
+key 5
+tick 5
+key 0
+tick 8
+key hash
+tick 3
+key 2
+tick 3
+key hash
+tick 3
+key star
+tick 20

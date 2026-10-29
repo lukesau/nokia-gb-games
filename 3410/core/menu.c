@@ -1,6 +1,11 @@
 #include "menu.h"
 #include "menu_header.h"
 
+#include <string.h>
+
+#include "munkiki.h"
+#include "munkiki_int.h"
+
 #include "bantumi_play.h"
 #include "font.h"
 #include "native_tiles.h"
@@ -77,7 +82,9 @@ enum {
     SCREEN_BT_BEANS,
     SCREEN_BT_LEVEL,
     SCREEN_BT_HELP,
-    SCREEN_BT_DEMO
+    SCREEN_BT_DEMO,
+    /* Munkiki's Castles, the Java game, which draws its own screens. */
+    SCREEN_MK
 };
 
 /* Space Impact's menu. Continue is there only while a game is paused. */
@@ -196,6 +203,7 @@ static const char *si_help_pages[SI_HELP_PAGES]; /* where the text's pages start
 static uint8_t si_help_pageno;
 static uint8_t si_demo_waiting; /* a demo started, its first tick not yet come: the page stays up */
 static uint8_t si_play_held(uint8_t keys);
+static uint8_t mk_held(uint8_t keys);
 static uint16_t si_top, si_last;
 /* The "Done" note after a set of chapters is chosen: the phone's shows for
    about 1.5 s, by MAME's clock. */
@@ -209,6 +217,11 @@ static uint8_t si_held;    /* the buttons held in the game, MENU_KEY_ bits */
 static uint8_t bt_item, bt_item_top, bt_paused, bt_option, bt_beans, bt_level, bt_help;
 static uint8_t bt_demo_waiting; /* as si_demo_waiting */
 static struct game_settings bt_settings;
+/* Munkiki's Castles: the buttons down in it, MENU_KEY_ bits. On the
+   phone it is under Games, More games, as "Munkiki"; the port lists it
+   after the five native games, as a game got for the phone. */
+static uint8_t mk_buttons;
+static const char text_munkiki[] = "Munkiki";
 
 /* The phone's LCD; the full-screen variant's own menus; its board. */
 enum {
@@ -637,7 +650,7 @@ static const char *item_name_at(uint8_t index)
 
 static const char *select_name(uint8_t index)
 {
-    return index < GAME_COUNT ? game_name(index) : text_about;
+    return index < GAME_COUNT ? game_name(index) : index == GAME_COUNT ? text_munkiki : text_about;
 }
 
 static void native_settings(void)
@@ -760,6 +773,8 @@ uint8_t menu_held(uint8_t keys)
 
     if (screen == SCREEN_SI_PLAY)
         return si_play_held(keys);
+    if (screen == SCREEN_MK)
+        return mk_held(keys);
     if (screen != SCREEN_PLAY || held == NO_KEY || (keys & (1 << held)))
         return 0;
     /* The held button came up; another one still down takes over. */
@@ -1285,7 +1300,86 @@ static void bt_help_forward(void)
 
 static uint8_t select_count(void)
 {
-    return full_screen ? GAME_COUNT + 1 : GAME_COUNT;
+    return full_screen ? GAME_COUNT + 2 : GAME_COUNT + 1;
+}
+
+#ifdef MUNKIKI_BANKED
+/* Munkiki's Castles draws its text a glyph at a time from the fonts
+   here (munkiki_int.h). */
+uint8_t mk_glyph_menu(uint8_t which, char c, uint16_t *columns) MK_FAR
+{
+    const struct font *f = which == 0 ? &font_small_plain : which == 1 ? &font_medium_bold
+                           : which == 2 ? &font_large_bold : &font_small_bold;
+    uint8_t code = (uint8_t)c, i, n;
+
+    if (code < FONT_FIRST_CHAR || code > FONT_LAST_CHAR)
+        code = '?';
+    i = (uint8_t)(code - FONT_FIRST_CHAR);
+    n = (uint8_t)(f->offsets[i + 1] - f->offsets[i]);
+    if (columns)
+        memcpy(columns, f->columns + f->offsets[i], n * sizeof *columns);
+    return n;
+}
+#endif
+
+/* Munkiki's Castles' record: two of the settings' slots (game.h). */
+static void mk_record_load(void)
+{
+    struct game_settings first, second;
+    struct munkiki_record record;
+
+    platform_settings_load(GAME_SLOT_MUNKIKI, &first);
+    record.top = first.top_score;
+    record.level_reached = (uint8_t)(first.level | first.option << 4);
+    if (platform_settings_load(GAME_SLOT_MUNKIKI_2, &second)) {
+        record.second = second.top_score;
+        record.sounds = second.level;
+        record.lights = second.option;
+    } else {
+        record.second = 0;
+        record.sounds = record.lights = 1;
+    }
+    munkiki_record_set(&record);
+}
+
+static void mk_record_save(void)
+{
+    struct game_settings first, second;
+    struct munkiki_record record;
+
+    munkiki_record_get(&record);
+    first.top_score = record.top;
+    first.level = (uint8_t)(record.level_reached & 15);
+    first.option = (uint8_t)(record.level_reached >> 4);
+    second.top_score = record.second;
+    second.level = record.sounds;
+    second.option = record.lights;
+    platform_settings_save(GAME_SLOT_MUNKIKI, &first);
+    platform_settings_save(GAME_SLOT_MUNKIKI_2, &second);
+}
+
+/* What the game reports: closed, back to the list; its record, saved. */
+static uint8_t mk_done(uint8_t what)
+{
+    if (what & MK_RECORD)
+        mk_record_save();
+    if (what & MK_CLOSED) {
+        screen = SCREEN_SELECT;
+        board_drawn = 0;
+        return 1;
+    }
+    return (uint8_t)(what & MK_DRAW);
+}
+
+static uint8_t mk_held(uint8_t keys)
+{
+    uint8_t up = (uint8_t)(mk_buttons & ~keys), key, changed = 0;
+
+    for (key = 0; up; key++, up >>= 1)
+        if (up & 1)
+            changed |= mk_done(munkiki_button(key, 0));
+    mk_buttons &= keys;
+    return changed;
 }
 
 static uint8_t handle_key(uint8_t key)
@@ -1301,6 +1395,10 @@ static uint8_t handle_key(uint8_t key)
         return si_play_key(key);
     if (screen == SCREEN_BT_PLAY)
         return bt_play_key(key);
+    if (screen == SCREEN_MK) {
+        mk_buttons |= (uint8_t)(1 << key);
+        return mk_done(munkiki_button(key, 1));
+    }
     if (screen == SCREEN_BT_DEMO) {
         /* As in Space Impact's: any key ends a demo, C back to the menu. */
         bantumi_play_call(BANTUMI_EVENT_PAUSE, 0);
@@ -1477,6 +1575,12 @@ static uint8_t handle_key(uint8_t key)
                 board_drawn = 0;
                 title_start();
             } else if (game == GAME_COUNT) {
+                mk_record_load();
+                mk_buttons = 0;
+                screen = SCREEN_MK;
+                board_drawn = 0;
+                munkiki_open();
+            } else if (game == GAME_COUNT + 1) {
                 screen = SCREEN_ABOUT;
             }
         } else if (key == MENU_KEY_BACK) {
@@ -1634,6 +1738,9 @@ uint8_t menu_tick(void)
     case SCREEN_BT_DEMO:
         changed = bt_elapse();
         break;
+    case SCREEN_MK:
+        changed = mk_done(munkiki_elapse(MENU_FRAME_US));
+        break;
     case SCREEN_SI_DONE:
         if (!--si_done_frames) {
             screen = SCREEN_SI_MENU;
@@ -1703,7 +1810,7 @@ static void draw_phone(void)
         draw_list(text_games, GAMES_COUNT, games_item, 0, games_name, text_select);
         break;
     case SCREEN_SELECT:
-        draw_list(text_games, GAME_COUNT, game, game_top, game_name, text_select);
+        draw_list(text_games, select_count(), game, game_top, select_name, text_select);
         break;
     case SCREEN_SETTINGS:
         draw_header(text_settings, (uint8_t)(setting + 1));
@@ -1915,7 +2022,7 @@ static void draw_native(void)
         native_list(text_games, GAMES_COUNT, games_item, games_name);
         break;
     case SCREEN_SELECT:
-        native_list(text_select_game, (uint8_t)(GAME_COUNT + 1), game, select_name);
+        native_list(text_select_game, (uint8_t)(GAME_COUNT + 2), game, select_name);
         break;
     case SCREEN_ABOUT:
         native_note(text_about, text_about_body, 0);
@@ -1979,7 +2086,7 @@ void menu_draw(void)
     uint8_t picture = screen == SCREEN_PLAY || screen == SCREEN_TITLE || screen == SCREEN_GAME_OVER
                       || screen == SCREEN_HIGH_SCORES || screen == SCREEN_SI_TITLE || screen == SCREEN_SI_PLAY
                       || screen == SCREEN_SI_SCORES || screen == SCREEN_SI_DEMO || screen == SCREEN_BT_TITLE
-                      || screen == SCREEN_BT_PLAY || screen == SCREEN_BT_DEMO;
+                      || screen == SCREEN_BT_PLAY || screen == SCREEN_BT_DEMO || screen == SCREEN_MK;
     uint8_t mode = full_screen && screen != SCREEN_MAIN && !picture ? VIEW_NATIVE : VIEW_PHONE;
 #ifdef NATIVE_PLATFORM_TILES
     uint16_t was_tiled = tiled_id;
@@ -2027,6 +2134,12 @@ void menu_draw(void)
 #endif
     if (screen == SCREEN_PLAY) {
         games_draw(!board_drawn);
+        board_drawn = 1;
+        return;
+    }
+    if (screen == SCREEN_MK) {
+        /* The game puts its own picture in the LCD view. */
+        munkiki_draw();
         board_drawn = 1;
         return;
     }

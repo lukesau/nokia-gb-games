@@ -53,6 +53,12 @@ enum {
 void munkiki_open(void) MK_FAR;
 /* A key went down or came up. */
 uint8_t munkiki_key(uint8_t key, uint8_t down) MK_FAR;
+/* A console button went down or came up, as menu.h numbers them (up,
+   down, A, B, left, right, Start, Select): on the game's lists and pages
+   A selects and B goes back; in the game the D-pad is 2, 8, 4 and 6, A
+   is 5 (push), B is 0 (hit), Start is the C key (the pause list) and
+   Select is # (look around). */
+uint8_t munkiki_button(uint8_t button, uint8_t down) MK_FAR;
 /* Lets this much time pass, in microseconds; a tick is every 100 ms. */
 uint8_t munkiki_elapse(uint16_t us) MK_FAR;
 /* One tick, for scripted runs. */

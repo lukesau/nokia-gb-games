@@ -15,14 +15,16 @@
 #ifdef MK_STATE_AT
 __at(MK_STATE_AT) uint8_t mk_cell[MK_CELLS];
 __at(MK_STATE_AT + MK_CELLS) uint16_t mk_ref[MK_CELLS];
-__at(MK_STATE_AT + 3 * MK_CELLS) struct mk_block mk_blocks[MK_MAX_BLOCKS];
+__at(MK_BLOCKS_AT) struct mk_block mk_blocks[MK_MAX_BLOCKS];
+__at(MK_THINGS_AT) struct mk_thing mk_things[MK_MAX_THINGS];
+__at(MK_MOVERS_AT) struct mk_mover mk_movers[MK_MAX_MOVERS];
 #else
 uint8_t mk_cell[MK_CELLS];
 uint16_t mk_ref[MK_CELLS];
 struct mk_block mk_blocks[MK_MAX_BLOCKS];
-#endif
 struct mk_thing mk_things[MK_MAX_THINGS];
 struct mk_mover mk_movers[MK_MAX_MOVERS];
+#endif
 struct mk_world mk;
 struct mk_view mkv;
 uint16_t mk_pressed, mk_released;
@@ -80,7 +82,7 @@ static void unpress(uint8_t key)
     mk_pressed &= (uint16_t)~(1u << key);
 }
 
-void mk_lives_reset(void)
+void mk_lives_reset(void) MK_FAR
 {
     memset(lives_taken, 0, sizeof lives_taken);
 }
@@ -97,7 +99,7 @@ static uint8_t life_taken(uint8_t level)
 }
 
 /* d.au: it is now. */
-void mk_life_take(void)
+void mk_life_take(void) MK_FAR
 {
     uint8_t i;
 
@@ -307,7 +309,7 @@ static void level_decode(const uint8_t *stream)
     join_walls(mk.block_count);
 }
 
-uint8_t mk_level_exists(uint8_t level)
+uint8_t mk_level_exists(uint8_t level) MK_FAR
 {
     uint8_t i;
 
@@ -331,7 +333,7 @@ static void level_find(uint8_t level)
 }
 
 /* d.aw: the level afresh, with Munkiki sliding in. */
-void mk_world_load(uint8_t level)
+void mk_world_load(uint8_t level) MK_FAR
 {
     mk.level = level;
     mk.life_taken = life_taken(level);
@@ -345,6 +347,22 @@ void mk_world_load(uint8_t level)
     mk.notes_left = mk.note_count;
     mk.moves = 0;
     mk.ended = 0;
+    mk.phase = -1;
+    mkv.dy = -64;
+    mk.frame = 0;
+    mk.action = 17;
+    mk.anim = 15;
+    mk.left = munkiki_anim_table[15].count;
+}
+
+/* d.ay's tail: the game goes on from the level's start, with Munkiki
+   sliding in. */
+void mk_world_resume(void) MK_FAR
+{
+    mk.px = (int32_t)mk.start_x * ONE;
+    mk.py = (int32_t)mk.start_y * ONE;
+    mk.pz = (int32_t)mk.start_z * ONE;
+    mk.facing = (int32_t)mk.start_facing * ONE;
     mk.phase = -1;
     mkv.dy = -64;
     mk.frame = 0;
@@ -750,7 +768,7 @@ static void mark(uint8_t x, uint8_t y, uint8_t z)
     cell_or((int16_t)MK_CELL(x, y, z), MK_THING_MUNKIKI);
 }
 
-uint8_t mk_any_pressed(void)
+uint8_t mk_any_pressed(void) MK_FAR
 {
     uint8_t any = mk_pressed != 0;
 
@@ -765,7 +783,7 @@ static int32_t idiv(int32_t a, uint8_t b)
 }
 
 /* d.m: a tick of the world. */
-void mk_world_tick(void)
+void mk_world_tick(void) MK_FAR
 {
     int8_t n2, n3;
     uint8_t n4, n5, n6;

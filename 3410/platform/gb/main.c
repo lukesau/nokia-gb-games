@@ -311,7 +311,7 @@ static uint8_t held_keys(void)
 #include "si_bench.h"
 #include "si_rows.h"
 
-#define BENCH_BANK 16
+#define BENCH_BANK 19
 
 void bench_step(void) { __asm__("nop"); }
 void bench_render(void) { __asm__("nop"); __asm__("nop"); }

@@ -82,18 +82,27 @@ struct mk_mover {
     uint8_t x, y, z;
 };
 
+#define MK_MAX_MOVERS 32
+/* The Game Boy keeps the world in its cartridge RAM, from MK_STATE_AT:
+   the cells, their references, the blocks, the things, the movers, and
+   then the picture's working room (munkiki_3d.c). */
+#define MK_BLOCKS_AT (MK_STATE_AT + 3 * MK_CELLS)
+#define MK_THINGS_AT (MK_BLOCKS_AT + MK_MAX_BLOCKS * 10)
+#define MK_MOVERS_AT (MK_THINGS_AT + MK_MAX_THINGS * 7)
+#define MK_SCRATCH_AT (MK_MOVERS_AT + MK_MAX_MOVERS * 9)
 #ifdef MK_STATE_AT
 extern __at(MK_STATE_AT) uint8_t mk_cell[MK_CELLS];
 extern __at(MK_STATE_AT + MK_CELLS) uint16_t mk_ref[MK_CELLS];
-extern __at(MK_STATE_AT + 3 * MK_CELLS) struct mk_block mk_blocks[MK_MAX_BLOCKS];
+extern __at(MK_BLOCKS_AT) struct mk_block mk_blocks[MK_MAX_BLOCKS];
+extern __at(MK_THINGS_AT) struct mk_thing mk_things[MK_MAX_THINGS];
+extern __at(MK_MOVERS_AT) struct mk_mover mk_movers[MK_MAX_MOVERS];
 #else
 extern uint8_t mk_cell[MK_CELLS];
 extern uint16_t mk_ref[MK_CELLS];
 extern struct mk_block mk_blocks[MK_MAX_BLOCKS];
-#endif
 extern struct mk_thing mk_things[MK_MAX_THINGS];
-#define MK_MAX_MOVERS 32
 extern struct mk_mover mk_movers[MK_MAX_MOVERS];
+#endif
 
 /* The world's state (class d). */
 struct mk_world {
@@ -169,7 +178,7 @@ enum {
     MK_SOUND_TITLE,
     MK_SOUND_DROWN
 };
-void mk_play(uint8_t sound);
+void mk_play(uint8_t sound) MK_FAR; /* munkiki_game.c */
 
 /* The bank the Game Boy keeps the sounds in, for sound_play_notes; 0
    elsewhere. */
@@ -183,34 +192,67 @@ void mk_play(uint8_t sound);
    and 4 the small bold. On the Game Boy they are in other banks, and
    far.c supplies this. */
 uint8_t mk_glyph(uint8_t font, char c, uint16_t *columns);
+/* On the Game Boy, the two that are: in the menus' bank for the fonts 0,
+   1, 2 and 4 (menu.c) and in the full-screen menus' for the tiny one
+   (menu_header.c). */
+uint8_t mk_glyph_menu(uint8_t font, char c, uint16_t *columns) MK_FAR;
+uint8_t mk_glyph_tiny(char c, uint16_t *columns) MK_FAR;
 
 /* munkiki.c */
-void mk_world_load(uint8_t level);         /* aw: a level afresh */
-void mk_world_tick(void);                  /* d.m */
-uint8_t mk_any_pressed(void);              /* KKM.o: and forgets them */
-uint8_t mk_level_exists(uint8_t level);
+void mk_world_load(uint8_t level) MK_FAR;  /* aw: a level afresh */
+void mk_world_resume(void) MK_FAR;         /* ay: the level as it was, Munkiki at its start */
+void mk_world_tick(void) MK_FAR;           /* d.m */
+uint8_t mk_any_pressed(void) MK_FAR;       /* KKM.o: and forgets them */
+uint8_t mk_level_exists(uint8_t level) MK_FAR;
+void mk_lives_reset(void) MK_FAR;          /* a new game: no level's life taken yet */
+void mk_life_take(void) MK_FAR;            /* d.au: this level's is */
 
-/* munkiki_3d.c: the picture, a row of MK_STRIDE bytes per row, the
-   leftmost pixel in the top bit, 1 black. */
+/* The picture: a row of MK_STRIDE bytes per row, the leftmost pixel in
+   the top bit, 1 black. The Game Boy draws it in the other games' picture
+   buffer, which is idle meanwhile (MK_FRAME_SHARED); munkiki_blit.h has
+   the drawing into it. */
+#ifdef MK_FRAME_SHARED
+#include "sprite.h"
+#define mk_frame sprite_screen
+#else
 extern uint8_t mk_frame[MK_STRIDE * MK_H];
-void mk_scene_draw(void);                  /* c.j: the world, then Munkiki and the effects */
-void mk_frame_clear(void);
-void mk_frame_fill(int8_t x, int8_t y, uint8_t w, uint8_t h, uint8_t black);
-/* A row-major picture (the JAR's format 1), with a mask of the same
-   layout or none, mirrored left to right with MK_FLIP; clipped to the
-   frame. */
-#define MK_FLIP 1
-void mk_frame_blit(int16_t x, int16_t y, uint8_t w, uint8_t h, const uint8_t *bits, const uint8_t *mask, uint8_t flags);
-/* Part of one, `w` by `h` of it from (sx, sy), at (x, y). */
-void mk_frame_blit_part(int16_t x, int16_t y, uint8_t w, uint8_t h, const uint8_t *bits, uint8_t stride, uint8_t sx, uint8_t sy);
-void mk_frame_pic(int16_t x, int16_t y, uint8_t which, uint8_t mask_which);
-/* Munkiki's picture, frame code `code`, at (x, y), only `rows` rows of it. */
+#endif
+/* munkiki_scene.c: c.j, the world, then Munkiki and the effects. */
+void mk_scene_draw(void) MK_FAR;
+
+/* munkiki_3d.c: the rasterizer, which the scene draws through. The
+   camera for the frame, moved down by `bob` sixteenths of a unit; the
+   backdrop; the shade of what follows (a gray, or 0 for black) and its
+   texture; and a mesh, scaled by (sx, sy, sz) in 16.16, at (ox, oy, oz)
+   in sixteenths of a unit, turned about y by `spin` and about z by
+   `spin_z` (binary angles, a turn 256). The eye's place in the world, in
+   sixteenths of a cell, for the order. */
+void mk3d_camera(int32_t bob) MK_FAR;
+void mk3d_backdrop(void) MK_FAR;
+void mk3d_shade(uint8_t gray) MK_FAR;
+enum {
+    MK_TEXTURE_NONE,
+    MK_TEXTURE_NOTE,
+    MK_TEXTURE_KEY,
+    MK_TEXTURE_WARP,
+    MK_TEXTURE_LIFE
+};
+void mk3d_texture(uint8_t which) MK_FAR;
+enum {
+    MK_MESH_RIM,   /* a floor block's black rim */
+    MK_MESH_TOP,   /* and its top */
+    MK_MESH_EDGES, /* a block's black edges */
+    MK_MESH_CUBE,  /* and its faces */
+    MK_MESH_THING, /* the diamond a note, key or life is on */
+    MK_MESH_WARP   /* the warp's square */
+};
+void mk3d_mesh(uint8_t which, int32_t sx, int32_t sy, int32_t sz, int32_t ox, int32_t oy, int32_t oz, uint8_t spin,
+               uint8_t spin_z) MK_FAR;
+extern int16_t mk3d_eye_x, mk3d_eye_y, mk3d_eye_z;
+/* The gray of a block kind (munkiki_shades, kept with the rasterizer). */
+uint8_t munkiki_shades_of(uint8_t kind) MK_FAR;
+/* munkiki_sprite.c: Munkiki's picture, frame code `code`, at (x, y), only
+   `rows` rows of it. */
 void mk_frame_munkiki(int16_t x, int16_t y, uint8_t code, uint8_t rows) MK_SHEET_FAR;
-void mk_frame_digits(int16_t x, int16_t y, uint16_t value); /* d.av: the HUD's count */
-void mk_frame_rect(int16_t x, int16_t y, uint8_t w, uint8_t h); /* a one-pixel outline */
-void mk_frame_line(int16_t x0, int16_t y0, int16_t x1, int16_t y1);
-void mk_frame_arc(int16_t x, int16_t y, uint8_t w, uint8_t h, uint8_t lower); /* the upper or lower half of an ellipse */
-/* Puts the frame on the LCD view. */
-void mk_frame_present(void);
 
 #endif

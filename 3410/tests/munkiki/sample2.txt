@@ -1,0 +1,61 @@
+# Timing-adjusted walk-through: waits for the level intro (cn=15, 9 ticks)
+# and the fade-in (c.bf -64 -> 0, 8 ticks) before pressing keys, and holds
+# star across a tick so the pause menu (an[11], read in KKM.j during paint)
+# actually opens.
+tick 3
+key fire
+tick 2
+select 0
+tick 2
+key 5
+tick 3
+key 5
+tick 3
+key 5
+# intro animation + fade-in
+tick 10
+frame frame_intro.pgm
+# forward one cell (cp=1, 6 ticks), then idle
+key 2
+tick 8
+frame frame_walk.pgm
+# turn right (cp=6), left (cp=7)
+key 6
+tick 8
+key 4
+tick 8
+# jump in place (an[0] -> cp=9)
+key 0
+tick 8
+# look-around mode (hash -> d.aj=1), nudge the camera, leave
+key hash
+tick 2
+key 8
+tick 2
+key hash
+tick 2
+# pause menu: star must still be down when the tick paints
+press star
+tick 1
+release star
+tick 1
+select 0
+tick 3
+# back out to the main menu through the pause list's Game menu (a KKM
+# save now exists, so the menu has Continue first and Options is index 4)
+key soft2
+tick 1
+select 2
+tick 1
+select 4
+tick 1
+choice 0 0
+choice 1 0
+back
+tick 1
+# High scores screen (index 2 with Continue present): drawString goes to STR
+select 2
+tick 3
+frame frame_hiscore.pgm
+back
+tick 1

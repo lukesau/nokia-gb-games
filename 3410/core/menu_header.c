@@ -26,3 +26,24 @@ void menu_header_draw(const char *title, uint8_t number)
     lcd_fill_rect(x + width, MENU_HEADER_LINE_Y, number_x - 2 - x - width, 1, 1);
     font_draw(&font_tiny_plain, number_x, 0, digits, 1);
 }
+
+#ifdef MUNKIKI_BANKED
+/* Munkiki's Castles' page titles are in the tiny font here
+   (munkiki_int.h). */
+#include <string.h>
+
+#include "munkiki_int.h"
+
+uint8_t mk_glyph_tiny(char c, uint16_t *columns) MK_FAR
+{
+    uint8_t code = (uint8_t)c, i, n;
+
+    if (code < FONT_FIRST_CHAR || code > FONT_LAST_CHAR)
+        code = '?';
+    i = (uint8_t)(code - FONT_FIRST_CHAR);
+    n = (uint8_t)(font_tiny_plain.offsets[i + 1] - font_tiny_plain.offsets[i]);
+    if (columns)
+        memcpy(columns, font_tiny_plain.columns + font_tiny_plain.offsets[i], n * sizeof *columns);
+    return n;
+}
+#endif

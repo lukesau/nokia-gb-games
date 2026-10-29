@@ -4,12 +4,11 @@
 
 volatile uint8_t sound_active;
 
-static volatile uint8_t requested; /* where a sound to start is in game_sounds, plus one; 0 for none */
-static const uint8_t *volatile requested_notes; /* or a run of notes elsewhere */
-static volatile uint8_t requested_bank;         /* the Game Boy bank they are in, 0 for none */
-static const uint8_t *next;        /* the note after the one sounding, or null */
-static uint8_t next_bank;          /* its bank */
-static uint8_t left;               /* units the note sounding still has */
+static const uint8_t *volatile requested; /* a sound to start: its notes, or null */
+static volatile uint8_t requested_bank;   /* the Game Boy bank they are in, 0 for none */
+static const uint8_t *next;               /* the note after the one sounding, or null */
+static uint8_t next_bank;                 /* its bank */
+static uint8_t left;                      /* units the note sounding still has */
 
 #ifdef __SDCC
 /* A bank mapped from the timer interrupt is put back from far_mapped,
@@ -32,32 +31,28 @@ void sound_play(uint8_t sound)
     place = game_sound_places[sound - GAME_SOUND_FIRST];
     if (place == 0xff)
         return;
-    requested = (uint8_t)(place + 1);
+    requested_bank = 0;
+    requested = game_sounds + place;
     sound_active = 1;
 }
 
 /* A run of notes in the same form kept anywhere else, and the Game Boy
-   bank it is in (0 when none need be mapped). */
+   bank it is in (0 when none need be mapped to read them). */
 void sound_play_notes(const uint8_t *notes, uint8_t bank)
 {
-    requested_notes = notes;
     requested_bank = bank;
-    requested = 0;
+    requested = notes;
     sound_active = 1;
 }
 
 void sound_tick(void)
 {
-    uint8_t request = requested, note, length;
-    const uint8_t *notes = requested_notes;
+    const uint8_t *request = requested;
+    uint8_t note, length;
 
     if (request) {
         requested = 0;
-        next = game_sounds + request - 1;
-        next_bank = 0;
-    } else if (notes) {
-        requested_notes = 0;
-        next = notes;
+        next = request;
         next_bank = requested_bank;
     } else if (!next || --left) {
         return;
