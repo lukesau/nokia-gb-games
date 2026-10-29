@@ -123,9 +123,17 @@ void platform_tone(uint8_t note)
         NR24 = 0x80;
         return;
     }
-    for (; note >= 12; note -= 12)
-        octave++;
-    period = (uint16_t)(2048 - (((tone_divider[note] >> octave) + 4) >> 3));
+    if (note >= SOUND_LOW) {
+        /* Two octaves under 440 Hz: the dividers doubled and doubled. */
+        note -= SOUND_LOW;
+        for (; note >= 12; note -= 12)
+            octave++;
+        period = (uint16_t)(2048 - (((tone_divider[note] << (2 - octave)) + 4) >> 3));
+    } else {
+        for (; note >= 12; note -= 12)
+            octave++;
+        period = (uint16_t)(2048 - (((tone_divider[note] >> octave) + 4) >> 3));
+    }
     NR21 = 0x80;
     NR22 = 0xf0;
     NR23 = (uint8_t)period;

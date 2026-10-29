@@ -182,6 +182,12 @@ void platform_tone(uint8_t note)
         return;
     }
     REG_SOUND2CNT_L = 0xf080;
+    if (note >= SOUND_LOW) {
+        /* Two octaves under 440 Hz. */
+        note -= SOUND_LOW;
+        REG_SOUND2CNT_H = (uint16_t)(0x8000 | (2048 - (((tone_divider[note % 12] << (2 - note / 12)) + 4) >> 3)));
+        return;
+    }
     REG_SOUND2CNT_H = (uint16_t)(0x8000 | (2048 - (((tone_divider[note % 12] >> note / 12) + 4) >> 3)));
 }
 

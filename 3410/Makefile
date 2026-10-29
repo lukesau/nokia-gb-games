@@ -60,7 +60,10 @@ BUILD := build
 COMMON := ../common
 ASSETS := $(BUILD)/assets
 ASSET_SRC := $(ASSETS)/game_assets.c $(ASSETS)/snake2_data.c $(ASSETS)/game_tables.c $(ASSETS)/si_data.c \
-	$(ASSETS)/si_rows_a.c $(ASSETS)/si_rows_b.c $(ASSETS)/si_rows_index.c $(ASSETS)/bantumi_data.c $(ASSETS)/game_apart.c
+	$(ASSETS)/si_rows_a.c $(ASSETS)/si_rows_b.c $(ASSETS)/si_rows_index.c $(ASSETS)/bantumi_data.c $(ASSETS)/game_apart.c \
+	$(ASSETS)/munkiki_data.c $(ASSETS)/munkiki_sheet.c
+# Munkiki's Castles' JAR, which the PMM holds (README.md).
+JAR ?= roms/munkikis_castles.jar
 CORE_SRC := $(wildcard core/*.c) $(wildcard $(COMMON)/core/*.c) $(COMMON)/bantumi/bantumi.c
 CORE_HDR := $(wildcard core/*.h) $(wildcard $(COMMON)/core/*.h) $(wildcard $(COMMON)/bantumi/*.h)
 INCLUDES := -Icore -I$(COMMON)/core -I$(COMMON)/bantumi -Iplatform/host -I$(COMMON)/platform/host -I$(ASSETS)
@@ -163,6 +166,11 @@ $(ASSETS)/game_assets.c: tools/extract_assets.py tools/extract_si.py tools/extra
 $(ASSETS)/snake2_data.c $(ASSETS)/game_tables.c $(ASSETS)/si_data.c $(ASSETS)/si_rows_a.c $(ASSETS)/si_rows_b.c \
 	$(ASSETS)/si_rows_index.c $(ASSETS)/bantumi_data.c $(ASSETS)/game_apart.c: $(ASSETS)/game_assets.c
 
+$(ASSETS)/munkiki_data.c: tools/extract_munkiki.py
+	$(PYTHON) tools/extract_munkiki.py "$(JAR)" $(ASSETS)
+
+$(ASSETS)/munkiki_sheet.c $(ASSETS)/munkiki_data.h: $(ASSETS)/munkiki_data.c
+
 $(BUILD)/test_core: tests/test_core.c $(COMMON)/core/lcd.c core/rand.c core/sprite.c $(CORE_HDR)
 	@mkdir -p $(BUILD)
 	$(CC) $(CFLAGS) -Icore -I$(COMMON)/core -o $@ tests/test_core.c $(COMMON)/core/lcd.c core/rand.c core/sprite.c
@@ -186,6 +194,13 @@ $(BUILD)/bantumi_replay: platform/host/bantumi_replay_main.c $(COMMON)/platform/
 
 $(BUILD)/replay: platform/host/replay_main.c $(COMMON)/platform/host/pgm.c $(GAME_SRC) $(CORE_HDR) $(ASSET_SRC)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ platform/host/replay_main.c $(COMMON)/platform/host/pgm.c $(GAME_SRC) $(ASSET_SRC)
+
+# Munkiki's Castles alone: the game's files, the LCD, the fonts it draws
+# with and the sounds it names, with the replay's own sound hooks.
+MUNKIKI_SRC := core/munkiki.c core/munkiki_3d.c core/munkiki_sprite.c core/munkiki_game.c $(COMMON)/core/lcd.c $(COMMON)/core/font.c \
+	$(ASSETS)/game_assets.c $(ASSETS)/game_apart.c $(ASSETS)/munkiki_data.c $(ASSETS)/munkiki_sheet.c
+$(BUILD)/munkiki_replay: platform/host/munkiki_replay_main.c $(COMMON)/platform/host/pgm.c $(MUNKIKI_SRC) $(CORE_HDR)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ platform/host/munkiki_replay_main.c $(COMMON)/platform/host/pgm.c $(MUNKIKI_SRC)
 
 # Snake II's reference runs: the firmware's own game played by the fork's
 # probe, which steers the snake to the food and the creatures and, after
