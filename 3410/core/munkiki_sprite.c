@@ -9,29 +9,33 @@
 
 static void half(int16_t x, int16_t y, uint8_t width, uint8_t rows, const struct munkiki_frame *f, uint8_t flip)
 {
-    uint8_t col, row, band_end = (uint8_t)(f->band + f->bands);
+    uint8_t col, band, band_end = (uint8_t)(f->band + f->bands);
     const uint8_t *bits = munkiki_sheet + f->at, *mask = munkiki_sheet_mask + f->at;
 
-    for (row = (uint8_t)(f->band * 8); row < rows && (row >> 3) < band_end; row++) {
-        int16_t py = (int16_t)(y + row);
-        uint16_t base = (uint16_t)((row >> 3) - f->band) * width;
-        uint8_t bit = (uint8_t)(1 << (row & 7));
-        uint8_t *line, *p;
+    /* A column of a band at a time: its eight rows are one byte of the
+       frame's bits and one of its mask, and sit in one bit of eight
+       bytes of the picture, a row apart. */
+    for (band = f->band; band < band_end && (uint8_t)(band << 3) < rows; band++, bits += width, mask += width) {
+        uint8_t row0 = (uint8_t)(band << 3), last = (uint8_t)(rows - row0 > 8 ? 8 : rows - row0);
+        int16_t py0 = (int16_t)(y + row0);
 
-        if (py < 0 || py >= MK_H)
-            continue;
-        line = mk_frame + py * MK_STRIDE;
         for (col = 0; col < width; col++) {
             int16_t px = (int16_t)(x + (flip ? width - 1 - col : col));
-            uint8_t screen_bit;
+            uint8_t m = mask[col], b = bits[col], screen_bit, r;
+            int16_t py = py0;
+            uint8_t *p;
 
-            if (!(mask[base + col] & bit) || px < 0 || px >= MK_W)
+            if (!m || px < 0 || px >= MK_W)
                 continue;
             screen_bit = (uint8_t)(0x80 >> (px & 7));
-            /* Without a branch on the bit: SDCC 4.6 drops the read of
-               the frame's byte for `line[i] |= b` here. */
-            p = line + (px >> 3);
-            *p = (uint8_t)((*p & (uint8_t)~screen_bit) | (screen_bit & (uint8_t)-(uint8_t)((bits[base + col] & bit) != 0)));
+            p = mk_frame + (px >> 3);
+            for (r = 0; r < last; r++, py++, m >>= 1, b >>= 1) {
+                if ((m & 1) && py >= 0 && py < MK_H) {
+                    uint8_t *q = p + py * MK_STRIDE;
+
+                    *q = (uint8_t)((*q & (uint8_t)~screen_bit) | (screen_bit & (uint8_t)-(uint8_t)(b & 1)));
+                }
+            }
         }
     }
 }

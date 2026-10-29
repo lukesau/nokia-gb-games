@@ -80,20 +80,47 @@ static int16_t cosine(uint8_t angle)
 /* On the Game Boy, in assembly through these, since SDCC's own 32-bit
    multiply costs some 2700 cycles and this some 1200: sixteen rounds of
    shift and add, the product gathering in de:hl as de shifts out. */
-static uint16_t mul_x, mul_y;
-static uint32_t mul_r;
+static int16_t mul_x, mul_y;
+static int32_t mul_r;
+static uint8_t mul_neg;
 
 static void mul_asm(void) __naked
 {
     __asm
+        ;; |x| in de, |y| in bc, the signs' difference in (_mul_neg)
+        xor a, a
+        ld (#_mul_neg), a
         ld a, (#_mul_x)
         ld e, a
         ld a, (#_mul_x + 1)
         ld d, a
+        bit 7, a
+        jr z, 00003$
+        ld a, #1
+        ld (#_mul_neg), a
+        xor a, a
+        sub a, e
+        ld e, a
+        ld a, #0
+        sbc a, d
+        ld d, a
+    00003$:
         ld a, (#_mul_y)
         ld c, a
         ld a, (#_mul_y + 1)
         ld b, a
+        bit 7, a
+        jr z, 00004$
+        ld a, (#_mul_neg)
+        xor a, #1
+        ld (#_mul_neg), a
+        xor a, a
+        sub a, c
+        ld c, a
+        ld a, #0
+        sbc a, b
+        ld b, a
+    00004$:
         ld hl, #0
         ld a, #16
     00001$:
@@ -107,6 +134,23 @@ static void mul_asm(void) __naked
     00002$:
         dec a
         jr nz, 00001$
+        ;; de:hl, negated when the signs differed
+        ld a, (#_mul_neg)
+        or a, a
+        jr z, 00005$
+        xor a, a
+        sub a, l
+        ld l, a
+        ld a, #0
+        sbc a, h
+        ld h, a
+        ld a, #0
+        sbc a, e
+        ld e, a
+        ld a, #0
+        sbc a, d
+        ld d, a
+    00005$:
         ld a, l
         ld (#_mul_r), a
         ld a, h
@@ -119,20 +163,22 @@ static void mul_asm(void) __naked
     __endasm;
 }
 
-static uint32_t mulu16(uint16_t a, uint16_t b)
+static int32_t mul16(int16_t a, int16_t b)
 {
     mul_x = a;
     mul_y = b;
+    mul_neg = 0;
     mul_asm();
     return mul_r;
 }
+
+/* Unsigned, for a and b under 32768. */
+#define mulu16(a, b) ((uint32_t)mul16((int16_t)(a), (int16_t)(b)))
 #else
 static uint32_t mulu16(uint16_t a, uint16_t b)
 {
     return (uint32_t)a * b;
 }
-#endif
-
 
 static int32_t mul16(int16_t a, int16_t b)
 {
@@ -140,6 +186,8 @@ static int32_t mul16(int16_t a, int16_t b)
 
     return (a < 0) != (b < 0) ? -(int32_t)r : (int32_t)r;
 }
+#endif
+
 
 /* num / den for den under 32768, with the remainder left in div_rem.
    SDCC's own 16-bit division costs some 6000 cycles on the Game Boy;
@@ -426,7 +474,7 @@ struct edge {
 };
 static struct edge L, R;
 
-static void edge_set(struct edge *e, const struct point *p, const struct point *q, int32_t yc)
+static void edge_set(struct edge *e, const struct point *p, const struct point *q, int16_t yc)
 {
     int16_t n = (int16_t)(q->y - p->y), s = (int16_t)(yc - p->y), dx, acc;
     uint16_t adx, d;
@@ -706,25 +754,30 @@ static void fill_rows(void) __naked
         ld a, c
         cp a, e
         ret nc
-        ;; c = x0, e = x1: the masks of the first and last bytes
-        ld a, c
-        and a, #7
-        ld l, a
-        ld h, #0
-        ld de, #_first_mask
-        add hl, de
-        ld a, (hl)
-        ld (#_span_mf), a
+        ;; c = x0, e = x1: the masks of the first and last bytes (de is
+        ;; kept across the table look-ups)
         ld a, e
         dec a
         ld e, a
         and a, #7
         ld l, a
         ld h, #0
+        push de
         ld de, #_last_mask
         add hl, de
+        pop de
         ld a, (hl)
         ld (#_span_ml), a
+        ld a, c
+        and a, #7
+        ld l, a
+        ld h, #0
+        push de
+        ld de, #_first_mask
+        add hl, de
+        pop de
+        ld a, (hl)
+        ld (#_span_mf), a
         ;; b = first byte, d = last byte
         ld a, c
         srl a
@@ -839,26 +892,28 @@ static void triangle(const struct point *a, const struct point *b, const struct 
     /* The long edge, a to c, is L; the short one for the first row is R.
        The middle vertex is left of the long edge when the turn a, b, c
        is negative: R is then the left edge. */
-    edge_set(&L, a, c, ((int32_t)y0 << 4) + 8);
-    on_ab = (((int32_t)y0 << 4) + 8) < b->y;
-    edge_set(&R, on_ab ? a : b, on_ab ? b : c, ((int32_t)y0 << 4) + 8);
+    edge_set(&L, a, c, (int16_t)((y0 << 4) + 8));
+    on_ab = (int16_t)((y0 << 4) + 8) < b->y;
+    edge_set(&R, on_ab ? a : b, on_ab ? b : c, (int16_t)((y0 << 4) + 8));
     row_at = mk_frame + y0 * MK_STRIDE;
 #ifdef __SDCC
     if (!texture) {
-        /* The rows down to the middle vertex, then the rest. */
-        int16_t ymid = on_ab ? (int16_t)((b->y + 7) >> 4) : y0;
-
-        if (ymid > y1 + 1)
-            ymid = (int16_t)(y1 + 1);
         row_y = (uint8_t)y0;
         fill_neg = neg;
-        fill_count = (uint8_t)(ymid - y0);
-        fill_rows();
         if (on_ab) {
-            edge_set(&R, b, c, ((int32_t)ymid << 4) + 8);
-            fill_count = (uint8_t)(y1 + 1 - ymid);
+            /* The rows down to the middle vertex, then the rest. */
+            int16_t ymid = (int16_t)((b->y + 7) >> 4);
+
+            if (ymid > y1 + 1)
+                ymid = (int16_t)(y1 + 1);
+            fill_count = (uint8_t)(ymid - y0);
             fill_rows();
+            edge_set(&R, b, c, (int16_t)((ymid << 4) + 8));
+            fill_count = (uint8_t)(y1 + 1 - ymid);
+        } else {
+            fill_count = (uint8_t)(y1 + 1 - y0);
         }
+        fill_rows();
         return;
     }
 #endif
@@ -941,14 +996,17 @@ static int32_t plane_side(const struct vertex *v, uint8_t plane)
 }
 
 
-/* a + (b - a) f, f in 0.15. */
+/* a + (b - a) f, f in 0.15 under 32768; b - a may need all sixteen
+   bits, so it goes through the multiply halved. */
 static int16_t lerp1(int16_t a, int16_t b, uint16_t f)
 {
     int32_t d = (int32_t)b - a;
+    uint16_t m = (uint16_t)(d < 0 ? -d : d);
+    uint32_t r = (mulu16(m >> 1, f) << 1) + ((m & 1) ? f : 0);
 
     if (d < 0)
-        return (int16_t)(a - (int32_t)(mulu16((uint16_t)-d, f) >> 15));
-    return (int16_t)(a + (int32_t)(mulu16((uint16_t)d, f) >> 15));
+        return (int16_t)(a - (int32_t)(r >> 15));
+    return (int16_t)(a + (int32_t)(r >> 15));
 }
 
 static void lerp(struct vertex *out, const struct vertex *a, const struct vertex *b, int32_t sa, int32_t sb)
@@ -966,6 +1024,8 @@ static void lerp(struct vertex *out, const struct vertex *a, const struct vertex
     while ((n >> k) > 32767)
         k++;
     f = (uint16_t)udiv32((uint32_t)(sa >> k) << 15, (uint16_t)(n >> k));
+    if (f > 32767)
+        f = 32767;
     out->x = lerp1(a->x, b->x, f);
     out->y = lerp1(a->y, b->y, f);
     out->z = lerp1(a->z, b->z, f);
@@ -1121,6 +1181,177 @@ static void mesh_classify(uint8_t count)
     }
 }
 
+#if defined(__SDCC) && !defined(MK_NO_PLACE_ASM)
+/* The box vertices in assembly: each is pl_base plus, for each axis, the
+   doublings in axis_pow that its datum's bits pick, added or taken away;
+   written to pl_out, pl_count of them from pl_data. SDCC's code for the
+   same loop cost some 4000 cycles a vertex. */
+static const int8_t *pl_data;
+static uint8_t *pl_out;
+static uint8_t pl_count, pl_axis, pl_m, pl_neg;
+static int16_t pl_base[3], pl_v[3];
+
+static void place_asm(void) __naked
+{
+    __asm
+        ld a, (#_pl_count)
+        or a, a
+        ret z
+        ld a, (#_pl_data)
+        ld e, a
+        ld a, (#_pl_data + 1)
+        ld d, a
+    00001$:
+        ld hl, #_pl_base
+        ld a, (hl+)
+        ld (#_pl_v), a
+        ld a, (hl+)
+        ld (#_pl_v + 1), a
+        ld a, (hl+)
+        ld (#_pl_v + 2), a
+        ld a, (hl+)
+        ld (#_pl_v + 3), a
+        ld a, (hl+)
+        ld (#_pl_v + 4), a
+        ld a, (hl)
+        ld (#_pl_v + 5), a
+        ld hl, #_axis_pow
+        ld a, #3
+        ld (#_pl_axis), a
+    00002$:
+        ld a, (de)
+        inc de
+        ld (#_pl_neg), a
+        bit 7, a
+        jr z, 00003$
+        cpl
+        inc a
+    00003$:
+        ld (#_pl_m), a
+        ld b, h
+        ld c, l
+    00004$:
+        ld a, (#_pl_m)
+        or a, a
+        jp z, 00007$
+        srl a
+        ld (#_pl_m), a
+        jp nc, 00006$
+        ld a, (#_pl_neg)
+        bit 7, a
+        jp nz, 00005$
+        ld a, (#_pl_v + 0)
+        add a, (hl)
+        ld (#_pl_v + 0), a
+        inc hl
+        ld a, (#_pl_v + 1)
+        adc a, (hl)
+        ld (#_pl_v + 1), a
+        inc hl
+        ld a, (#_pl_v + 2)
+        add a, (hl)
+        ld (#_pl_v + 2), a
+        inc hl
+        ld a, (#_pl_v + 3)
+        adc a, (hl)
+        ld (#_pl_v + 3), a
+        inc hl
+        ld a, (#_pl_v + 4)
+        add a, (hl)
+        ld (#_pl_v + 4), a
+        inc hl
+        ld a, (#_pl_v + 5)
+        adc a, (hl)
+        ld (#_pl_v + 5), a
+        inc hl
+        jp 00004$
+    00005$:
+        ld a, (#_pl_v + 0)
+        sub a, (hl)
+        ld (#_pl_v + 0), a
+        inc hl
+        ld a, (#_pl_v + 1)
+        sbc a, (hl)
+        ld (#_pl_v + 1), a
+        inc hl
+        ld a, (#_pl_v + 2)
+        sub a, (hl)
+        ld (#_pl_v + 2), a
+        inc hl
+        ld a, (#_pl_v + 3)
+        sbc a, (hl)
+        ld (#_pl_v + 3), a
+        inc hl
+        ld a, (#_pl_v + 4)
+        sub a, (hl)
+        ld (#_pl_v + 4), a
+        inc hl
+        ld a, (#_pl_v + 5)
+        sbc a, (hl)
+        ld (#_pl_v + 5), a
+        inc hl
+        jp 00004$
+    00006$:
+        ld a, l
+        add a, #6
+        ld l, a
+        jp nc, 00004$
+        inc h
+        jp 00004$
+    00007$:
+        ld hl, #30
+        add hl, bc
+        ld a, (#_pl_axis)
+        dec a
+        ld (#_pl_axis), a
+        jp nz, 00002$
+        push de
+        ld a, (#_pl_out)
+        ld e, a
+        ld a, (#_pl_out + 1)
+        ld d, a
+        ld hl, #_pl_v
+        ld a, (hl+)
+        ld (de), a
+        inc de
+        ld a, (hl+)
+        ld (de), a
+        inc de
+        ld a, (hl+)
+        ld (de), a
+        inc de
+        ld a, (hl+)
+        ld (de), a
+        inc de
+        ld a, (hl+)
+        ld (de), a
+        inc de
+        ld a, (hl)
+        ld (de), a
+        inc de
+        xor a, a
+        ld (de), a
+        inc de
+        ld (de), a
+        inc de
+        ld (de), a
+        inc de
+        ld (de), a
+        inc de
+        ld a, e
+        ld (#_pl_out), a
+        ld a, d
+        ld (#_pl_out + 1), a
+        pop de
+        ld a, (#_pl_count)
+        dec a
+        ld (#_pl_count), a
+        jp nz, 00001$
+        ret
+    __endasm;
+}
+#endif
+
 /* A mesh: byte vertices, scaled by (sx, sy, sz) in 16.16 and moved to
    (ox, oy, oz) in sixteenths of a unit, both before the camera; the
    mesh's own rotation about y, if any, in binary angle `spin`; and the
@@ -1166,6 +1397,17 @@ static void mesh_place(const int8_t *data, uint8_t count, int32_t sx, int32_t sy
         base[0] += move_x;
         base[1] += move_y;
         base[2] += move_z;
+#if defined(__SDCC) && !defined(MK_NO_PLACE_ASM)
+        pl_data = data;
+        pl_out = (uint8_t *)verts;
+        pl_count = count;
+        pl_base[0] = (int16_t)base[0];
+        pl_base[1] = (int16_t)base[1];
+        pl_base[2] = (int16_t)base[2];
+        place_asm();
+        mesh_classify(count);
+        return;
+#endif
         for (i = 0; i < count; i++) {
             int16_t vx = (int16_t)base[0], vy = (int16_t)base[1], vz = (int16_t)base[2];
             uint8_t axis;
