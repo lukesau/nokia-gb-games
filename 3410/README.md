@@ -4,7 +4,8 @@
 
 The Nokia 3410 (NHM-2 v5.46) follow-up to the [3310's](../3310/README.md): the 3410's built-in games
 re-implemented in C from a map of the firmware, with their data read from
-your own dump at build time. One portable core runs on the host and as a
+your own dump at build time, and its Java game from a decompile of its
+JAR. One portable core runs on the host and as a
 Game Boy ROM (`.gb`) and a GBA ROM (`.gba`).
 
 What is there so far:
@@ -54,6 +55,17 @@ What is there so far:
 - the top score and the chosen level, maze and beans, kept in
   battery-backed cartridge RAM.
 
+- Munkiki's Castles: the phone's Java game, re-implemented in C from a
+  decompile of its JAR, which the build reads for its levels, pictures,
+  frames, text and sounds: all 30 levels and the six Instructions demos,
+  the rules checked tick for tick against the JAR itself run in a harness
+  (`make check-munkiki`); its 3D view drawn by the port's own rasterizer
+  from the JAR's geometry and camera, which match the phone's frames in
+  where everything falls but not pixel for pixel; its menu, High scores,
+  Instructions and Options in the style the phone draws them. On the
+  phone it is under Games, More games; the port lists it sixth in Select
+  game, as a game got for the phone. See [docs/munkiki.md](docs/munkiki.md);
+
 Not yet: Bumper and Link5, the Chapters note's tick, the main menu's
 Games icon and the lists' sliding highlight.
 
@@ -71,12 +83,12 @@ full-screen variant's menus at the GBA's size, its Snake II board 29 by 17
 cells shown at 2x over the whole screen. The keys are the same; the
 vibrator drives a rumble cartridge's motor.
 
-| | Menus | Snake II | Space Impact | Bantumi |
-|---|---|---|---|---|
-| D-pad | up and down | steer (2, 4, 6, 8) | fly (8, 0, *, #) | left and right move the hand (4, 6), up passes the first move (#) |
-| A | select | turn clockwise (#) | fire (1) | sow (5) |
-| B | back | turn anticlockwise (*) | special weapon (4) | hint, at level 1 (*) |
-| Start, Select | select | pause | pause | pause |
+| | Menus | Snake II | Space Impact | Bantumi | Munkiki's Castles |
+|---|---|---|---|---|---|
+| D-pad | up and down | steer (2, 4, 6, 8) | fly (8, 0, *, #) | left and right move the hand (4, 6), up passes the first move (#) | forward, back, turn (2, 8, 4, 6) |
+| A | select | turn clockwise (#) | fire (1) | sow (5) | push (5) |
+| B | back | turn anticlockwise (*) | special weapon (4) | hint, at level 1 (*) | hit (0) |
+| Start, Select | select | pause | pause | pause | Start the pause list (C), Select look around (#) |
 
 See [docs/plan.md](docs/plan.md) and, in the RE fork,
 `docs/games_applications_3410.md`, `docs/games_snake2_3410.md`,
@@ -91,6 +103,9 @@ the RE fork, in whose `ports/` directory this repository is kept, or
 checks; `make check-gb` and `make check-gba` run the ROMs headlessly
 against the host's frames (`check-gba` with mGBA's core, which
 `../common/scripts/setup-mgba.sh` builds).
+`make check-munkiki` runs Munkiki's Castles' scripts through the JAR
+itself (a JVM is needed) and the port and compares every field of the
+game's state after every tick.
 `make golden-snake`, `make golden-si` and `make golden-bantumi` record
 Snake II, Space Impact and Bantumi games in the fork's MAME
 (`golden-si-menus` Space Impact's title and High scores, `golden-si-demos`
@@ -126,7 +141,8 @@ For now the RE fork's `make normalize-3410` lays them out for MAME:
 
 Munkiki's Castles is a JAR inside the PMM (40888 bytes, SHA-256
 `e94f9c942968acfadd13e19c62fc0aa8e48f0758a2ec00f2a9ba42269433caf8`),
-kept locally as `roms/munkikis_castles.jar`.
+kept locally as `roms/munkikis_castles.jar`, which the build reads
+(`JAR=` points elsewhere).
 
 ## License
 

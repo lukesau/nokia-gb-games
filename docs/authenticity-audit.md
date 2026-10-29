@@ -258,6 +258,29 @@ The map is the fork's `games_bantumi_3410.md`; the code is the 3310's
 | Redraw after every event but a closing one, a demo's first and Menu | measured | the framework is not traced | frames |
 | The search in Game Boy assembly | port, the 3310's | `common/bantumi/search.s` | only against the host |
 
+### Munkiki's Castles (3410)
+
+The game is Java (MIDP 1.0, Nokia UI and M3D), run by the phone's KVM;
+the map is its decompiled JAR (`3410/docs/munkiki.md`). "JAR" below means
+checked against the JAR's own classes running on a JVM
+(`3410/tools/munkiki_harness`, `make check-munkiki`), which compares the
+game's whole state tick by tick.
+
+| Feature | Source | Evidence | Golden |
+|---|---|---|---|
+| Moves, jumps, falls, pushing, breaking, travelling and bouncy blocks, notes, keys, warps, lives, level end, bonus | JAR's code, re-implemented | `tests/munkiki/{sample,sample2,demos,level1}.txt`, all fields equal | JAR |
+| Screens, lists, texts, map, game over, High scores, Options, demos, 100 ms tick, * held | JAR's code | the same scripts | JAR |
+| Levels, pictures, frames, geometry, grays, animations, texts, tones | data | `tools/extract_munkiki.py` | JAR (state), eye (pictures) |
+| Camera | JAR's code + measured | the floor's edges on their rows once the row scale is 49, not 48 | eye |
+| Fonts, glyph placement, list style, dither phase, horizon row | measured | MAME frames with the keys below | eye |
+| Rasterizer, painter's order | port | the phone's M3D not read | no |
+| Place in the menus (sixth in Select game) | port | the phone has it under More games | no |
+| Continue from this session, list-style text pages and Options | port | the JAR's record store and Form pages not reproduced | no |
+| Tones' rendering | data + assumed tempo | MAME's DSP does not play them | no |
+
+MAME keys to the phone's Munkiki (`make run-keys GAMES_PRODUCT=3410`
+in the fork): `enter,wait1500,up,wait300,up,wait300,up,wait300,up,wait1000,enter,wait1500,down,wait300,down,wait300,down,wait300,down,wait300,down,wait300,enter,wait1500,enter,wait4000` reaches More games and opens it; then `enter` through the title and the lists.
+
 ## Mismatches found
 
 Places where a comment, README or map claims more than the evidence, or

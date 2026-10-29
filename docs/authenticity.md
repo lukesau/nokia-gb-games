@@ -213,6 +213,46 @@ title and the Instructions demos. From watching the phone: the Instructions
 text pages, the menu, Game options, No. of beans and Level pages, and when
 the framework redraws.
 
+### Munkiki's Castles
+
+The phone's one Java game, a MIDlet its KVM runs; the port is a
+re-implementation in C from a decompile of its JAR
+(`3410/docs/munkiki.md`).
+
+**From the code.** The world and its rules (class `d`: Munkiki's moves,
+jumps, falls, pushing, breaking, riding, the notes, keys, warps and lives,
+the levels' end and the bonus count), the flow of screens (`KKM` and the
+canvas `b`: title, lists, hint and level texts, map, game over, High
+scores, Options, the six Instructions demos), the timer's 100 ms tick,
+and the camera: `make check-munkiki` runs the JAR's own classes on a JVM
+beside the port and compares the whole state after every tick.
+
+**From the data.** The levels, the pictures, Munkiki's frames, the 3D
+geometry and its grays, the animation tables, the English texts and the
+twelve ringing tones, all read from the JAR at build time.
+
+**From watching the phone.** The fonts the KVM draws the game's text in
+and where a glyph sits on its line; the style of the game's lists (title,
+rows, bar, scrollbar, soft keys); the dither patterns and their phase; the
+horizon's row and where the floor's edges fall, which fixed the
+projection's row scale at 49 where the frustum gives 48.
+
+**The port's own.** The rasterizer: the phone's M3D was not read, so the
+picture is the same scene from the same camera in the same grays, drawn
+by the port's own fixed-point filler and painter's order, not the phone's
+pixels. Its place in the menus: sixth in Select game, where the phone has
+it under Games, More games, as "Munkiki" (there is no More games here).
+Continue goes on with this session's game rather than the JAR's saved
+snapshot. The Instructions' text pages and Options are drawn in the list
+style, their Form pages not having been captured. The tones' tempo is
+assumed (none is set in the data).
+
+**Not checked.** The picture against the phone beyond what is listed:
+the 3D frames are compared by eye. The phone's rendering of the tones
+was not heard (MAME's DSP does not play them). The GB keeps the phone's
+pace by showing fewer pictures when a tick's picture takes longer than
+the tick.
+
 ### The pages around the games
 
 The Games page, Settings pages and Instructions layout are carried over
