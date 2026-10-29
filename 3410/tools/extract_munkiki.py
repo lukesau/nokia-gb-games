@@ -288,7 +288,8 @@ def main():
     for name, size in GEOMETRY:
         if name:
             header.append(f"extern const {'uint8_t' if name == 'shades' else 'int8_t'} munkiki_{name}[{size}];")
-            gfx.append((c_bytes if name == "shades" else c_signed)(f"munkiki_{name}", d[at:at + size]))
+            (pics_out if name == "ground" else gfx).append(
+                (c_bytes if name == "shades" else c_signed)(f"munkiki_{name}", d[at:at + size]))
         at += size
     for name, values in GEOMETRY_STATIC:
         header.append(f"extern const int8_t munkiki_{name}[{len(values)}];")

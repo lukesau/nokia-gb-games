@@ -228,7 +228,7 @@ void mk_scene_draw(void) MK_FAR;
    `spin_z` (binary angles, a turn 256). The eye's place in the world, in
    sixteenths of a cell, for the order. */
 void mk3d_camera(int32_t bob) MK_FAR;
-void mk3d_backdrop(void) MK_FAR;
+void mk3d_backdrop(const int16_t *v) MK_FAR;
 void mk3d_shade(uint8_t gray) MK_FAR;
 enum {
     MK_TEXTURE_NONE,

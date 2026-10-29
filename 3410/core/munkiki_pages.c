@@ -66,31 +66,52 @@ static uint8_t text_width(uint8_t font, const char *text, uint8_t len)
 
 /* Draws `len` characters with their top-left corner at (x, y), black on
    white or, inverted, white on black over `rows` rows, clipped to the
-   frame. */
+   frame. Written for SDCC: a column's bits are shifted out one a row down
+   a pointer, with no multiply or variable shift per pixel, and the pixel
+   is written without a branch (SDCC 4.6 drops the read of `*p` in an
+   `if (col & 1) *p |= bit; else *p &= ~bit;` here, and reads a register
+   that holds something else). */
 static void text_draw_rows(uint8_t font, int16_t x, int16_t y, const char *text, uint8_t len, uint8_t inverted,
                            uint8_t rows)
 {
     uint16_t columns[16];
-    uint8_t n, i, row, bit;
+    uint8_t n, i, bit, top = 0, count;
+    uint8_t *base;
 
+    if (y >= MK_H || y + rows <= 0)
+        return;
+    if (y < 0)
+        top = (uint8_t)-y;
+    if (y + rows > MK_H)
+        rows = (uint8_t)(MK_H - y);
+    count = (uint8_t)(rows - top);
+    base = mk_frame + (y + top) * MK_STRIDE;
     while (len--) {
         n = mk_glyph(font, *text++, columns);
-        for (i = 0; i < n; i++, x++) {
-            if (x < 0 || x >= MK_W)
-                continue;
-            bit = (uint8_t)(0x80 >> (x & 7));
-            for (row = 0; row < rows; row++) {
-                int16_t py = (int16_t)(y + row);
-                uint8_t *p;
+        for (i = 0; i < n; i++) {
+            uint16_t col;
+            uint8_t *p, r, notbit;
 
-                if (py < 0 || py >= MK_H)
-                    continue;
-                p = mk_frame + py * MK_STRIDE + (x >> 3);
-                if (((columns[i] >> row) & 1) != inverted)
-                    *p |= bit;
-                else
-                    *p &= (uint8_t)~bit;
+            if (x >= 0 && x < MK_W) {
+                bit = (uint8_t)(0x80 >> (x & 7));
+                notbit = (uint8_t)~bit;
+                col = columns[i];
+                if (top)
+                    col >>= top;
+                if (inverted)
+                    col = (uint16_t)~col;
+                p = base + (x >> 3);
+                r = count;
+                while (r) {
+                    uint8_t m = (uint8_t)(bit & (uint8_t)-(uint8_t)(col & 1));
+
+                    *p = (uint8_t)((*p & notbit) | m);
+                    p += MK_STRIDE;
+                    col >>= 1;
+                    r--;
+                }
             }
+            x++;
         }
     }
 }
@@ -411,22 +432,33 @@ static void hud_digits(int16_t x, int16_t y, uint16_t value)
     } while ((value /= 10) > 0);
 }
 
-/* The frame onto the LCD view, marking what changed. */
+/* The frame onto the LCD view, marking the cells that changed. The view
+   is at a multiple of eight in both directions, so a byte of the frame is
+   a cell's row. A row is compared whole first, unrolled (a loop here is
+   slow on the Game Boy, and the library's memcmp has no room in its
+   bank); only a changed row is gone through for its cells. */
 static void frame_present(void)
 {
-    uint8_t y, x;
-    uint8_t *dst;
+    uint8_t y, band;
+    uint8_t *dst = lcd_fb + (uint16_t)lcd_view_y * LCD_STRIDE + (lcd_view_x >> 3);
+    uint8_t *cells = lcd_dirty + (uint16_t)(lcd_view_y >> 3) * LCD_CELLS_X + (lcd_view_x >> 3);
     const uint8_t *src = mk_frame;
 
-    for (y = 0; y < MK_H; y++) {
-        dst = lcd_fb + (lcd_view_y + y) * LCD_STRIDE + (lcd_view_x >> 3);
-        for (x = 0; x < MK_STRIDE; x++) {
-            if (dst[x] != src[x]) {
-                dst[x] = src[x];
-                lcd_mark_dirty((uint8_t)(lcd_view_x + x * 8), (uint8_t)(lcd_view_y + y), 8, 1);
-            }
+    for (y = 0, band = 0; y < MK_H; y++, src += MK_STRIDE, dst += LCD_STRIDE) {
+        if (((dst[0] ^ src[0]) | (dst[1] ^ src[1]) | (dst[2] ^ src[2]) | (dst[3] ^ src[3]) | (dst[4] ^ src[4])
+             | (dst[5] ^ src[5]) | (dst[6] ^ src[6]) | (dst[7] ^ src[7]) | (dst[8] ^ src[8]) | (dst[9] ^ src[9])
+             | (dst[10] ^ src[10]) | (dst[11] ^ src[11])) != 0) {
+            uint8_t x;
+
+            for (x = 0; x < MK_STRIDE; x++)
+                if (dst[x] != src[x])
+                    cells[x] = 1;
+            memcpy(dst, src, MK_STRIDE);
         }
-        src += MK_STRIDE;
+        if (++band == 8) {
+            band = 0;
+            cells += LCD_CELLS_X;
+        }
     }
 }
 

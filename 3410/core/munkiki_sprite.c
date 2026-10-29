@@ -16,7 +16,7 @@ static void half(int16_t x, int16_t y, uint8_t width, uint8_t rows, const struct
         int16_t py = (int16_t)(y + row);
         uint16_t base = (uint16_t)((row >> 3) - f->band) * width;
         uint8_t bit = (uint8_t)(1 << (row & 7));
-        uint8_t *line;
+        uint8_t *line, *p;
 
         if (py < 0 || py >= MK_H)
             continue;
@@ -28,10 +28,10 @@ static void half(int16_t x, int16_t y, uint8_t width, uint8_t rows, const struct
             if (!(mask[base + col] & bit) || px < 0 || px >= MK_W)
                 continue;
             screen_bit = (uint8_t)(0x80 >> (px & 7));
-            if (bits[base + col] & bit)
-                line[px >> 3] |= screen_bit;
-            else
-                line[px >> 3] &= (uint8_t)~screen_bit;
+            /* Without a branch on the bit: SDCC 4.6 drops the read of
+               the frame's byte for `line[i] |= b` here. */
+            p = line + (px >> 3);
+            *p = (uint8_t)((*p & (uint8_t)~screen_bit) | (screen_bit & (uint8_t)-(uint8_t)((bits[base + col] & bit) != 0)));
         }
     }
 }

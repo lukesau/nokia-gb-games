@@ -163,6 +163,26 @@ static void thing_draw(const struct mk_thing *t)
     mk3d_texture(MK_TEXTURE_NONE);
 }
 
+/* The backdrop (c.z): a triangle fixed in eye space, the JAR's ground
+   scaled by ten, a fifth wider (its sides are on the frustum's side
+   planes, which rounding in the rasterizer would clip them by; the
+   screen cuts it the same); looking up stretches it, looking down
+   lowers it. */
+static void backdrop_draw(void)
+{
+    int16_t v[9];
+    uint8_t i;
+    int32_t sy = 655360L + (mkv.tilt > 0 ? mkv.tilt : 0);
+    int32_t oy = mkv.tilt > 0 ? 0 : (mkv.tilt << 1);
+
+    for (i = 0; i < 3; i++) {
+        v[i * 3] = (int16_t)(((int32_t)munkiki_ground[i * 3] * 786432L) >> 12);
+        v[i * 3 + 1] = (int16_t)((((int32_t)munkiki_ground[i * 3 + 1] * sy) >> 12) + (oy >> 12));
+        v[i * 3 + 2] = (int16_t)(((int32_t)munkiki_ground[i * 3 + 2] * 655360L) >> 12);
+    }
+    mk3d_backdrop(v);
+}
+
 /* The 3D part of c.j. */
 static void world_draw(void)
 {
@@ -172,7 +192,7 @@ static void world_draw(void)
     /* Standing on a bouncy block, the whole world bobs. */
     mk3d_camera(mkv.wobble ? (wobble * 20) >> 12 : 0);
     frame_clear();
-    mk3d_backdrop();
+    backdrop_draw();
     order_count = 0;
     for (i = 0; i < mk.block_count; i++)
         if (mk_blocks[i].kind)

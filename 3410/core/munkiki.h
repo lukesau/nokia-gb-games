@@ -76,9 +76,10 @@ struct munkiki_record {
 void munkiki_record_set(const struct munkiki_record *in) MK_FAR;
 void munkiki_record_get(struct munkiki_record *out) MK_FAR;
 
-/* For the host's tools: the state the harness logs, written as text, and
-   a list's entry chosen by index, as the harness does. */
-#ifndef __SDCC
+/* For the host's replay (built with MUNKIKI_DEBUG): the state the harness
+   logs, written as text, and a list's entry chosen by index, as the
+   harness does. */
+#ifdef MUNKIKI_DEBUG
 int munkiki_state_text(char *out, int size);
 void munkiki_select(uint8_t entry);
 #endif

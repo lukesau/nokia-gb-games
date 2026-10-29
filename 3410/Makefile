@@ -105,7 +105,7 @@ GB_MUNKIKI_BANK := 16
 GB_BANK13 := core/munkiki.c $(ASSETS)/munkiki_data.c
 GB_BANK14 := core/munkiki_3d.c $(ASSETS)/munkiki_gfx.c
 GB_BANK15 := core/munkiki_sprite.c $(ASSETS)/munkiki_sheet.c
-GB_BANK16 := core/munkiki_game.c $(ASSETS)/munkiki_sounds.c
+GB_BANK16 := core/munkiki_game.c core/munkiki_camera.c $(ASSETS)/munkiki_sounds.c
 GB_BANK17 := core/munkiki_pages.c $(ASSETS)/munkiki_text.c
 GB_BANK18 := core/munkiki_scene.c $(ASSETS)/munkiki_pics.c
 # The pictures as the Game Boy draws them (core/si_rows.h): what draws
@@ -215,11 +215,11 @@ $(BUILD)/replay: platform/host/replay_main.c $(COMMON)/platform/host/pgm.c $(GAM
 
 # Munkiki's Castles alone: the game's files, the LCD, the fonts it draws
 # with and the sounds it names, with the replay's own sound hooks.
-MUNKIKI_SRC := core/munkiki.c core/munkiki_3d.c core/munkiki_scene.c core/munkiki_sprite.c core/munkiki_game.c core/munkiki_pages.c \
+MUNKIKI_SRC := core/munkiki.c core/munkiki_3d.c core/munkiki_camera.c core/munkiki_scene.c core/munkiki_sprite.c core/munkiki_game.c core/munkiki_pages.c \
 	$(COMMON)/core/lcd.c $(COMMON)/core/font.c $(ASSETS)/game_assets.c $(ASSETS)/game_apart.c \
 	$(ASSETS)/munkiki_data.c $(ASSETS)/munkiki_sounds.c $(ASSETS)/munkiki_text.c $(ASSETS)/munkiki_gfx.c $(ASSETS)/munkiki_pics.c $(ASSETS)/munkiki_sheet.c
 $(BUILD)/munkiki_replay: platform/host/munkiki_replay_main.c $(COMMON)/platform/host/pgm.c $(MUNKIKI_SRC) $(CORE_HDR)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ platform/host/munkiki_replay_main.c $(COMMON)/platform/host/pgm.c $(MUNKIKI_SRC)
+	$(CC) $(CFLAGS) -DMUNKIKI_DEBUG $(INCLUDES) -o $@ platform/host/munkiki_replay_main.c $(COMMON)/platform/host/pgm.c $(MUNKIKI_SRC)
 
 # Snake II's reference runs: the firmware's own game played by the fork's
 # probe, which steers the snake to the food and the creatures and, after

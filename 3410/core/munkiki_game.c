@@ -597,11 +597,27 @@ uint8_t munkiki_button(uint8_t button, uint8_t down) MK_FAR
     return munkiki_key(key, down);
 }
 
+/* Whether the page shown changes from tick to tick: the game's picture,
+   its bonus count, map and game over, and the High scores' mark. Lists,
+   the Instructions and the game's text pages change only with a key. */
+static uint8_t page_animated(void)
+{
+    if (mkf.list != LIST_NONE || mkf.screen == SCREEN_HELP)
+        return 0;
+    if (mkf.screen == SCREEN_GAME || mkf.screen == SCREEN_DEMO)
+        return mkf.part != PART_HINT && mkf.part != PART_LEVEL;
+    return mkf.screen == SCREEN_SCORES;
+}
+
 uint8_t munkiki_tick(void) MK_FAR
 {
-    uint8_t what = MK_DRAW;
+    uint8_t what = 0;
+    int8_t screen_was = mkf.screen;
+    uint8_t list_was = mkf.list, part_was = mkf.part;
 
     game_tick();
+    if (page_animated() || mkf.screen != screen_was || mkf.list != list_was || mkf.part != part_was)
+        what = MK_DRAW;
     /* b.e: keys that came up are forgotten before the paint, which draws
        the game whenever it is on the canvas (b.paint). */
     mk_pressed &= (uint16_t)~mk_released;
@@ -631,7 +647,7 @@ uint8_t munkiki_elapse(uint16_t us) MK_FAR
     return what;
 }
 
-#ifndef __SDCC
+#ifdef MUNKIKI_DEBUG
 #include <stdio.h>
 
 void munkiki_select(uint8_t entry)
